@@ -1,0 +1,4 @@
+node_modules
+*.cpp
+socks5.txt
+workingProxies.txt
