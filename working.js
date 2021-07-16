@@ -10,65 +10,47 @@ function arrStartsWith(arr, arrStart, start=0) {
     }
     return true;
 }
-class MinecraftProtocol {
-	static writeVarInt(val) {
-		// "VarInts are never longer than 5 bytes"
-		// https://wiki.vg/Data_types#VarInt_and_VarLong
-		const buf = Buffer.alloc(5)
-		// let written = 0
-
-		// while (true) {
-		// 	if ((val & 0xFFFFFF80) === 0) {
-		// 		buf.writeUInt8(val, written++)
-		// 		break
-		// 	} else {
-		// 		buf.writeUInt8(val & 0x7F | 0x80, written++)
-		// 		val >>>= 7
-		// 	}
-		// }
-		// return val;
-		return Buffer.from([16, 0, 0])
-		// return buf.slice(0, written)
+class MsgPacker {
+	constructor(msg, sys) {
+		this.result = Buffer.from([msg*2+sys]) // booleans turn into int automatically. 
+		this.sys = sys;
 	}
-	static writeVarIn2t(val) {
-		// "VarInts are never longer than 5 bytes"
-		// https://wiki.vg/Data_types#VarInt_and_VarLong
-		const buf = Buffer.alloc(5)
-		let written = 0
-
-		while (true) {
-			if ((val & 0xFFFFFF80) === 0) {
-				buf.writeUInt8(val, written++)
-				break
-			} else {
-				buf.writeUInt8(val & 0x7F | 0x80, written++)
-				val >>>= 7
+	AddString(str) {
+		this.result = Buffer.concat([this.result, Buffer.from(str), Buffer.from([0x00])])
+	}
+	AddBuffer(buffer) {
+		this.result = Buffer.concat([this.result, buffer]) 
+	}
+	AddInt(i) {
+		var result = []
+		var pDst = (i >> 25) & 0x40
+		var i = i ^(i>>31)
+		pDst |= i & 0x3f
+		i >>= 6
+		if (i) {
+			pDst |= 0x80
+			result.push(pDst)
+			while (true) {
+				pDst++;
+				pDst = i & (0x7f)
+				i>>= 7;
+				pDst |= (i != 0) << 7
+				result.push(pDst)
+				if (!i)
+					break;
 			}
-		}
-		return buf.slice(0, written)
+		} else
+			result.push(pDst)
+
+			// ... i'll just stop trying to understand.
+		
+		this.result = Buffer.concat([this.result, Buffer.from(result)]) 
 	}
-
-	static writeString(val) {
-		return Buffer.from(val, 'UTF-8')
+	get size() {
+		return this.result.byteLength;
 	}
-
-	static writeUShort(val) {
-		return Buffer.from([val >> 8, val & 0xFF])
-	}
-
-	static concat(chunks) {
-		let length = 0
-
-		for (const chunk of chunks) {
-			length += chunk.length
-		}
-
-		const buf = [
-			MinecraftProtocol.writeVarInt(length),
-			...chunks
-		]
-
-		return Buffer.concat(buf)
+	get buffer() {
+		return this.result
 	}
 }
 process.on("exit", () => {
@@ -96,7 +78,7 @@ function Unpack(packet=Buffer.from()) {
 	
 	// console.log(unpacked)
 	
-	if (unpacked.twprotocol.flags == 0x10)
+	if (unpacked.twprotocol.flags == 0x10 || unpacked.twprotocol.flags == 128)
 		return unpacked;
 	if (packet.indexOf(Buffer.from([0xff,0xff,0xff,0xff])) == 0)
 		return unpacked;
@@ -121,7 +103,7 @@ function Unpack(packet=Buffer.from()) {
 		chunk.type = packet[0] & 1 ? "sys" : "game"; // & 1 = binary, ****_***1. e.g 0001_0111 sys, 0001_0110 game
 		chunk.msgid = (packet[0]-(packet[0]&1))/2;
 		chunk.msg = messageTypes[packet[0]&1][chunk.msgid];
-		chunk.ye = packet[0].toString(16)
+		// chunk.ye = packet[0].toString(16)
 		// console.log(sys(packet[1]))
 		chunk.raw = packet.slice(0, chunk.bytes)
 		Object.values(messageUUIDs).forEach((a, i) => {
@@ -142,27 +124,10 @@ function Unpack(packet=Buffer.from()) {
 	return unpacked
 }
 
-test = MinecraftProtocol.concat([
-	MinecraftProtocol.writeVarInt(20),
-	MinecraftProtocol.writeString("name"),
-	MinecraftProtocol.writeString(""),
-	MinecraftProtocol.writeVarInt(-1),
-	MinecraftProtocol.writeString("pinky"),
-	MinecraftProtocol.writeVarInt(1),
-	MinecraftProtocol.writeVarInt(7667531), /* color body */
-	MinecraftProtocol.writeVarInt(11468598), /* color feet */
-])
-test2 = MinecraftProtocol.concat([
-	MinecraftProtocol.writeVarInt(16),
-	MinecraftProtocol.writeString("TKEN"),
-	// MinecraftProtocol.writeVarInt(0),
-	// MinecraftProtocol.writeVarInt(0),
-])
+
 // startinfo: 
 "\x00\x04\x01\x41\x07\x03\x28\x74\x65\x73\x74\x00\x00\x40\x70\x69\x6e\x6b\x79\x00\x01\x8b\xfd\xa7\x07\xb6\xfc\xf7\x0a\x1d\x56\xdb\x98"
 "\x10\x00\x00\x10\x00\x00\x74\x65\x73\x74\x10\x00\x00\x70\x69\x6e\x6b\x79\x10\x00\x00\x10\x00\x00\x10\x00\x00\x0d\x6b\xa4\x88"
-console.log(test.toString())
-console.log(test2.toString())
 
 var socket = net.createSocket("udp4");
 socket.bind(13337)
@@ -171,56 +136,72 @@ socket.bind(13337)
 function join(host, port) {
 	var onetime = []
 	var latestBuf;
-	var State = 0; // 0 = offline; 1 = 
-	message = true;
-	latestBuf = Buffer.from([16, 0, 0, 1, "T".charCodeAt(0), "K".charCodeAt(0), "E".charCodeAt(0), "N".charCodeAt(0), bufffff])
-	latestBuf = Buffer.concat([latestBuf, bufffff])
-	socket.send(latestBuf, 0, latestBuf.length, a.port, a.host, (err, bytes) => {
-		console.log(err, bytes)
-	})
+	var State = 0; // 0 = offline; 1 = STATE_CONNECTING = 1, STATE_LOADING = 2, STATE_ONLINE = 3
 	var ack = 0;
 	var clientAck = 0;
+	var receivedSnaps = 0; /* wait for 2 ss before seeing self as connected */
 	var lastMsg = "";
+	message = true;
+	function SendControlMsg(msg, ExtraMsg="") {
+		return new Promise((resolve, reject) => {
+			latestBuf = Buffer.from([0x10, ack, 0x00, msg])
+			latestBuf = Buffer.concat([latestBuf, Buffer.from(ExtraMsg), bufffff])
+			socket.send(latestBuf, 0, latestBuf.length, port, host, (err, bytes) => {
+				// console.log(`sent controlmsg ${msg} with ack: `, ack, bytes)	
+				resolve(bytes)
+			})
+			setTimeout(() => { resolve("failed, rip") }, 2000)
+		})
+	}
+	function SendMsgEx(Msg, Flags) {
+		if (!Msg instanceof MsgPacker) 
+			return;
+		var pcd = getPcd(ack, Msg.size, Flags); 
+		if (Msg.sys)
+			var latestBuf = Buffer.from([0x0, ack, 0x01, pcd[0], pcd[1], pcd[2]])
+		else
+			var latestBuf = Buffer.from([0x0, ack, 0x01, pcd[0], pcd[1], clientAck])
+		latestBuf = Buffer.concat([latestBuf, Msg.buffer, bufffff])
+		socket.send(latestBuf, 0, latestBuf.length, port, host, (err, bytes) => {
+			console.log(`sent Msg: `, latestBuf)	
+		})
+	}
+	SendControlMsg(1, "TKEN");
 	time = new Date().getTime() + 2000;
 	socket.on("message", a => {
 		unpacked = Unpack(a)
 		if (unpacked.twprotocol.flags != 128 && unpacked.twprotocol.ack) {
 			clientAck = unpacked.twprotocol.ack+1;
 			unpacked.chunks.forEach(a => {
-				if (!a.msg.startsWith("SNAP")) {
+				if (!a.msg)
+					console.log(unpacked)
+				if (a.msg && !a.msg.startsWith("SNAP")) {
 					if (a.seq != undefined && a.seq != -1)
 						ack = a.seq
 					
-					console.log(a.msg + " is not snap, new ack: " + ack, a.sequence + ", new clientAck: " + clientAck);
+					// console.log(a.msg + " is not snap, new ack: " + ack, a.sequence + ", new clientAck: " + clientAck);
 				}
 			})
 		}
 		// console.log(unpacked)
 		var chunkMessages = unpacked.chunks.map(a => a.msg)
 		// console.log(a.toJSON().data.slice(a.toJSON().data.length-4, a.toJSON().data.length))
-		if (a.toString().includes("TKEN") || arrStartsWith(a.toJSON().data, [16, 0, 0, 0])) {
+		if (a.toString().includes("TKEN") || arrStartsWith(a.toJSON().data, [0x10, 0x0, 0x0, 0x0])) {
 			bufffff = Buffer.from(a.toJSON().data.slice(a.toJSON().data.length-4, a.toJSON().data.length))
-			latestBuf = Buffer.concat([Buffer.from([16, 0, 0, 3]), bufffff]);
-			socket.send(latestBuf, 0, latestBuf.length, port, host, (err, bytes) => {
-				console.log(err, bytes)
-			})
-			latestBuf = Buffer.from("0.6 626fce9a778df4d4".split("").map(a => a.charCodeAt(0)))
-			latestBuf = Buffer.concat([Buffer.from([0x0, 0x0, 0x1, 0x41, 0x07, 0x1, 0x3]), latestBuf, Buffer.from([0, 0]), bufffff])
-			console.log(latestBuf.toString())
-			socket.send(latestBuf, 0, latestBuf.length, port, host, (err, bytes) => {
-				console.log(err, bytes)
-			})
+			SendControlMsg(3);
+			State = 2; // loading state
+			var packer = new MsgPacker(1, true);
+			packer.AddString("0.6 626fce9a778df4d4");
+			packer.AddString(""); // password
+			SendMsgEx(packer, 1)
+			// latestBuf = Buffer.from("0.6 626fce9a778df4d4")
+			// latestBuf = Buffer.concat([Buffer.from([0x0, 0x0, 0x1, 0x41, 0x07, 0x1, 0x3]), latestBuf, Buffer.from([0, 0]), bufffff])
+			// console.log(latestBuf.toString())
+			// socket.send(latestBuf, 0, latestBuf.length, port, host, (err, bytes) => {
+				// console.log(err, bytes)
+			// })
 		} else if (arrStartsWith(a.toJSON().data, [0x0, 0x1, 0x2, 0x41, 0x03, 0x01, 0x01, 0xf6, 0x21, 0xa5, 0xa1, 0xf5])) {
-			// latestBuf = MinecraftProtocol.concat([
-			// 	MinecraftProtocol.writeVarInt(20),
-			// 	MinecraftProtocol.writeString("name"),
-			// 	MinecraftProtocol.writeString(""),
-			// 	MinecraftProtocol.writeVarInt(-1),
-			// 	MinecraftProtocol.writeString("pinky"),
-			// 	MinecraftProtocol.writeVarInt(1),
-			// 	MinecraftProtocol.writeVarInt(7667531), /* color body */
-			// 	MinecraftProtocol.writeVarInt(11468598), /* color feet */
-			// ])	
+
 			// latestBuf = Buffer.concat([latestBuf, bufffff])
 			latestBuf = Buffer.from([0x0, 0x2, 0x01, 0x40, 0x01, 0x02, 0x1d])
 			latestBuf = Buffer.concat([latestBuf, bufffff])
@@ -229,16 +210,6 @@ function join(host, port) {
 			})
 			
 		} else if (arrStartsWith(a.toJSON().data, [0x0, 0x02, 0x02])) {
-			// latestBuf = MinecraftProtocol.concat([
-			// 	MinecraftProtocol.writeVarInt(20),
-			// 	MinecraftProtocol.writeString("testas"),
-			// 	MinecraftProtocol.writeString(""),
-			// 	MinecraftProtocol.writeVarInt(-1),
-			// 	MinecraftProtocol.writeString("pinky"),
-			// 	MinecraftProtocol.writeVarInt(1),
-			// 	MinecraftProtocol.writeVarInt(7667531), /* color body */
-			// 	MinecraftProtocol.writeVarInt(11468598), /* color feet */
-			// ])	
 			latestBuf = Buffer.from([0x00, 0x04, 0x01, 0x41, 0x07, 0x03, 0x28, 0x74, 0x65, 0x73, 0x74, 0x00, 0x00, 0x40, 0x70, 0x69, 0x6e, 0x6b, 0x79, 0x00, 0x01, 0x8b, 0xfd, 0xa7, 0x07, 0xb6, 0xfc, 0xf7, 0x0a])
 			latestBuf = Buffer.concat([latestBuf, bufffff])
 			// "\x00\x04\x01\x41\x07\x03\x28\x74\x65\x73\x74\x00\x00\x40\x70\x69\x6e\x6b\x79\x00\x01\x8b\xfd\xa7\x07\xb6\xfc\xf7\x0a\xc2\xa2\xbf\xd4"
@@ -263,7 +234,7 @@ function join(host, port) {
 				console.log(err, bytes)
 			})
 			
-		} else if ((unpacked.chunks[0] && chunkMessages.includes("CAPABILITIES") || unpacked.chunks[0] && chunkMessages.includes("MAP_CHANGE")) && !onetime.includes("ready")) {
+		} else if ((unpacked.chunks[0] && chunkMessages.includes("CAPABILITIES") || unpacked.chunks[0] && chunkMessages.includes("MAP_CHANGE"))) {
 			// latestBuf = Buffer.from([0x00, 0x02, 0x01, 0x40, 0x01, 0x02, 0x1d])
 			// latestBuf = Buffer.concat([latestBuf, bufffff])
 			// send ready
@@ -275,19 +246,33 @@ function join(host, port) {
 			})
 			onetime.push("ready")
 		} else if ((unpacked.chunks[0] && chunkMessages.includes("CON_READY") || unpacked.chunks[0] && chunkMessages.includes("SV_MOTD"))) {
-			latestBuf = Buffer.from([0x0, ack, 0x01, 0x41, 0x07, 0x03, 0x28, 0x74, 0x65, 0x73, 0x74, 0x00, 0x00, 0x40, 0x70, 0x69, 0x6e, 0x6b, 0x79, 0x00, 0x01, 0x8b, 0xfd, 0xa7, 0x07, 0xb6, 0xfc, 0xf7, 0x0a, 0x66, 0x79, 0x21, 0xb3])			
-			latestBuf = Buffer.concat([latestBuf, bufffff]);
+			// latestBuf = Buffer.from([0x0, ack, 0x01, 0x41, 0x07, 0x03, 0x28, 0x74, 0x65, 0x73, 0x74, 0x00, 0x00, 0x40, 0x70, 0x69, 0x6e, 0x6b, 0x79, 0x00, 0x01, 0x8b, 0xfd, 0xa7, 0x07, 0xb6, 0xfc, 0xf7, 0x0a, 0x66, 0x79, 0x21, 0xb3])			
+			// latestBuf = Buffer.concat([latestBuf, bufffff]);
+			var packer = new MsgPacker(20, false);
+			packer.AddString("test");
+			packer.AddString("");
+			packer.AddInt(-1); /* country */
+			packer.AddString("pinky"); /* skin */
+			packer.AddInt(1); /* use custom color */
+			packer.AddInt(7667531); /* color body */
+			packer.AddInt(11468598); /* color feet */
 			console.log(ack, "THIS IS READY SENMD STARTINFO! SEND STUFF OR SMTH?!")
-			socket.send(latestBuf, 0, latestBuf.length, port, host, (err, bytes) => {
-				console.log("SUCCESFFUYLLY SENT STARTINFO: " + bytes)
-			})
+			SendMsgEx(packer, 1);
+			// socket.send(latestBuf, 0, latestBuf.length, port, host, (err, bytes) => {
+			// 	console.log("SUCCESFFUYLLY SENT STARTINFO: " + bytes)
+			// })
 			onetime.push("startinfo")
 			
 		} else if (unpacked.chunks[0] && chunkMessages.includes("SV_READY_TO_ENTER")) {
-			
-		}else if (unpacked.chunks[0] && chunkMessages.includes("SNAP")) {
+			State = 3
+		}else if (chunkMessages.includes("SNAP") || chunkMessages.includes("SNAP_EMPTY") || chunkMessages.includes("SNAP_SINGLE")) {
 			// just skip snap, nobody likes snap
-		} 
+			receivedSnaps++; /* wait for 2 ss before seeing self as connected */
+			if (receivedSnaps >= 2)
+				State = 3
+		} else if (unpacked.twprotocol.flags == 128 || unpacked.twprotocol.flags == 0x10) { // also skip compressed & control messages
+
+		}
 		else {
 			
 			console.log("invalid packet: ", unpacked, ack)
@@ -295,12 +280,7 @@ function join(host, port) {
 		}
 		if (new Date().getTime() - time >= 1000) {
 			time = new Date().getTime();
-			// console.log("sending keepalive.\n")
-			latestBuf = Buffer.from([0x10, ack, 0x00, 0x00])
-			latestBuf = Buffer.concat([latestBuf, bufffff])
-			socket.send(latestBuf, 0, latestBuf.length, port, host, (err, bytes) => {
-				console.log("sent keepalive: ", bytes)	
-			})
+			SendControlMsg(0);
 		}
 	/*	setTimeout(() => {
 			if (State != 3) {
@@ -327,33 +307,43 @@ function join(host, port) {
 
 			}
 		}, 7500)*/
-		process.stdin.on("data", data => {
-			if (lastMsg != data) {
-				lastMsg = data;
-				data = data.slice(0, -2)
-				console.log(data)
-				pcd = getPcd(ack, data.byteLength+4, 1)
-				latestBuf = Buffer.from([0x00, ack, 0x01, pcd[0], pcd[1], clientAck, 0x22, 0x00])
-				latestBuf = Buffer.concat([latestBuf, data, Buffer.from([0x0a, 0x00]), bufffff])
-				socket.send(latestBuf, 0, latestBuf.length, port, host, (err, bytes) => {
-					console.log("SUCCESFFUYLLY SENT CHAT: " + bytes)
-					// process.exit()
-				})
-			}
-		})
 		
 		// if (ack >= 100)
 		// return socket.disconnect()
 		// console.log(bufffff.toJSON().data)
 		
 	})
+	process.stdin.on("data", data => {
+		if (lastMsg != data && State == 3) {
+			lastMsg = data;
+			data = data.slice(0, -2)
+			var packer = new MsgPacker(17, false);
+			packer.AddInt(0); // team
+			packer.AddString(data.toString() + '\n');
+			var pcd = getPcd(ack, packer.size, 1); 
+			var latestBuf = Buffer.from([0x0, ack, 0x01, pcd[0], pcd[1], pcd[2]])
+			latestBuf = Buffer.concat([latestBuf, packer.buffer, bufffff])
+	
+			// packer.AddBuffer(Buffer.concat([data, Buffer.from([0x0a, 0x00])]));
+			SendMsgEx(packer, 1);
+			// CMsgPacker Packer(17); /* cl_say */
+			// Packer.AddInt(0); /* team */
+			// Packer.AddString(input.toString());
+			
+			// console.log(data)
+			// pcd = getPcd(ack, data.byteLength+4, 1)
+			// console.log(latestBuf)
+			// latestBuf = Buffer.from([0x00, ack, 0x01, pcd[0], pcd[1], clientAck, 0x22, 0x00])
+			// latestBuf = Buffer.concat([latestBuf, data, Buffer.from([0x0a, 0x00]), bufffff]) /* cl_chat */
+			// socket.send(latestBuf, 0, latestBuf.length, port, host, (err, bytes) => {
+				// console.log("SUCCESFFUYLLY SENT CHAT: ", latestBuf, packer)
+				// process.exit()
+			// })
+		}
+	})
 	process.on("SIGINT", () => { // on ctrl + c
-		console.log("BYE! trying to send disconnect..")
-		latestBuf = Buffer.from([0x10, ack, 0x0, 0x04])
-		latestBuf = Buffer.concat([latestBuf, bufffff]);
-		// console.log(ack, "THIS IS READY SENMD STARTINFO! SEND STUFF OR SMTH?!")
-		socket.send(latestBuf, 0, latestBuf.length, port, host, (err, bytes) => {
-			console.log("SUCCESFFUYLLY SENT DISCONNECT: " + bytes)
+		console.log("BYE! sending disconnect..")
+		SendControlMsg(4).then(() => {
 			process.exit()
 		})
 	})
