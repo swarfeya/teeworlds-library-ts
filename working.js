@@ -71,6 +71,7 @@ var messageUUIDs = {
 	"CLIENT_VERSION": Buffer.from([0x8c, 0x00, 0x13, 0x04, 0x84, 0x61, 0x3e, 0x47, 0x87, 0x87, 0xf6, 0x72, 0xb3, 0x83, 0x5b, 0xd4]),
 	"CAPABILITIES": Buffer.from([0xf6, 0x21, 0xa5, 0xa1, 0xf5, 0x85, 0x37, 0x75, 0x8e, 0x73, 0x41, 0xbe, 0xee, 0x79, 0xf2, 0xb2]),
 }
+var argv = process.argv.slice(2)
 
 function Unpack(packet=Buffer.from()) {
 	// var sys = (i) => { return {"type": i&1 ? "sys" : "game", "msgid": (i-(i&1))/2, "msg": messageTypes[i&1][(i-(i&1))/2], "ye": i.toString(16)}}
@@ -138,13 +139,13 @@ function join(host, port) {
 	var latestBuf;
 	var State = 0; // 0 = offline; 1 = STATE_CONNECTING = 1, STATE_LOADING = 2, STATE_ONLINE = 3
 	var ack = 0;
-	var clientAck = 0;
+	var clientAck = 1;
 	var receivedSnaps = 0; /* wait for 2 ss before seeing self as connected */
 	var lastMsg = "";
 	message = true;
 	function SendControlMsg(msg, ExtraMsg="") {
 		return new Promise((resolve, reject) => {
-			latestBuf = Buffer.from([0x10, ack, 0x00, msg])
+			latestBuf = Buffer.from([0x10, ack&0xff, 0x00, msg])
 			latestBuf = Buffer.concat([latestBuf, Buffer.from(ExtraMsg), bufffff])
 			socket.send(latestBuf, 0, latestBuf.length, port, host, (err, bytes) => {
 				// console.log(`sent controlmsg ${msg} with ack: `, ack, bytes)	
@@ -157,13 +158,25 @@ function join(host, port) {
 		if (!Msg instanceof MsgPacker) 
 			return;
 		var pcd = getPcd(ack, Msg.size, Flags); 
-		if (Msg.sys)
-			var latestBuf = Buffer.from([0x0, ack, 0x01, pcd[0], pcd[1], pcd[2]])
-		else
-			var latestBuf = Buffer.from([0x0, ack, 0x01, pcd[0], pcd[1], clientAck])
-		latestBuf = Buffer.concat([latestBuf, Msg.buffer, bufffff])
+		// mpd = (*mpd << 1) | sys; /* store system flag in msg id */
+		// if(Flags&1)
+			// ack = (ack+1)%(1<<10); /* max sequence */
+		// pcd = Msg.buffer;
+		pcd[0] = ((Flags&3)<<6)|((Msg.size>>4)&0x3f);
+		pcd[1] = (Msg.size&0xf);
+		if(Flags&1) {
+			pcd[1] |= (ack>>2)&0xf0;
+			pcd[2] = ack&0xff;
+		} 	
+		// if (Msg.sys)
+		// var latestBuf = Buffer.from([0x0, ack, 0x01, pcd[0], pcd[1], pcd[2]])
+		// else
+			// var latestBuf = Buffer.from([0x0, ack, 0x01, pcd[0], pcd[1], clientAck])
+		// latestBuf = Buffer.concat([latestBuf, Msg.buffer, bufffff])
+		latestBuf = Buffer.from([0x0, ack, 0x1, pcd[0], pcd[1], clientAck]);
+		var latestBuf = Buffer.concat([latestBuf, Msg.buffer, bufffff]);
 		socket.send(latestBuf, 0, latestBuf.length, port, host, (err, bytes) => {
-			console.log(`sent Msg: `, latestBuf)	
+			console.log(`sent Msg with ack ${ack}, ${clientAck}: `, latestBuf)	
 		})
 	}
 	SendControlMsg(1, "TKEN");
@@ -179,7 +192,7 @@ function join(host, port) {
 					if (a.seq != undefined && a.seq != -1)
 						ack = a.seq
 					
-					// console.log(a.msg + " is not snap, new ack: " + ack, a.sequence + ", new clientAck: " + clientAck);
+					console.log(a.msg + " is not snap, new ack: " + ack, a.sequence + ", new clientAck: " + clientAck);
 				}
 			})
 		}
@@ -201,23 +214,32 @@ function join(host, port) {
 				// console.log(err, bytes)
 			// })
 		} else if (arrStartsWith(a.toJSON().data, [0x0, 0x1, 0x2, 0x41, 0x03, 0x01, 0x01, 0xf6, 0x21, 0xa5, 0xa1, 0xf5])) {
-
+			var packet = new MsgPacker(14, true)
+			SendMsgEx(packet, 1)
 			// latestBuf = Buffer.concat([latestBuf, bufffff])
-			latestBuf = Buffer.from([0x0, 0x2, 0x01, 0x40, 0x01, 0x02, 0x1d])
-			latestBuf = Buffer.concat([latestBuf, bufffff])
-			socket.send(latestBuf, 0, latestBuf.length, port, host, (err, bytes) => {
-				console.log("Sent " + bytes)
-			})
+			// latestBuf = Buffer.from([0x0, 0x2, 0x01, 0x40, 0x01, 0x02, 0x1d])
+			// latestBuf = Buffer.concat([latestBuf, bufffff])
+			// socket.send(latestBuf, 0, latestBuf.length, port, host, (err, bytes) => {
+				// console.log("Sent " + bytes)
+			// })
 			
 		} else if (arrStartsWith(a.toJSON().data, [0x0, 0x02, 0x02])) {
-			latestBuf = Buffer.from([0x00, 0x04, 0x01, 0x41, 0x07, 0x03, 0x28, 0x74, 0x65, 0x73, 0x74, 0x00, 0x00, 0x40, 0x70, 0x69, 0x6e, 0x6b, 0x79, 0x00, 0x01, 0x8b, 0xfd, 0xa7, 0x07, 0xb6, 0xfc, 0xf7, 0x0a])
-			latestBuf = Buffer.concat([latestBuf, bufffff])
+			var packer = new MsgPacker(20, false);
+			packer.AddString(argv[1] ? argv[1] : "nameless tee");
+			packer.AddString("");
+			packer.AddInt(-1); /* country */
+			packer.AddString("greyfox"); /* skin */
+			packer.AddInt(1); /* use custom color */
+			packer.AddInt(10346103); /* color body */
+			packer.AddInt(65535); /* color feet */
+			console.log(ack, "THIS IS READY SENMD STARTINFO! SEND STUFF OR SMTH?!")
+			SendMsgEx(packer, 1);
 			// "\x00\x04\x01\x41\x07\x03\x28\x74\x65\x73\x74\x00\x00\x40\x70\x69\x6e\x6b\x79\x00\x01\x8b\xfd\xa7\x07\xb6\xfc\xf7\x0a\xc2\xa2\xbf\xd4"
 	// "\x00\x04\x01\x41\x07\x03\x28\x74\x65\x73\x74\x00\x00\x40\x70\x69\x6e\x6b\x79\x00\x01\x8b\xfd\xa7\x07\xb6\xfc\xf7\x0a\x9d\x4f\x56\x15"
 
-			socket.send(latestBuf, 0, latestBuf.length, port, host, (err, bytes) => {
-				console.log(err, bytes)
-			})
+			// socket.send(latestBuf, 0, latestBuf.length, port, host, (err, bytes) => {
+			// 	console.log(err, bytes)
+			// })
 			
 		} else if (unpacked.chunks[0] && chunkMessages.includes("SV_READY_TO_ENTER")) {
 			latestBuf = Buffer.from([0x00, ack, 0x01, 0x40, 0x01, 0x04, 0x1f])
@@ -249,13 +271,13 @@ function join(host, port) {
 			// latestBuf = Buffer.from([0x0, ack, 0x01, 0x41, 0x07, 0x03, 0x28, 0x74, 0x65, 0x73, 0x74, 0x00, 0x00, 0x40, 0x70, 0x69, 0x6e, 0x6b, 0x79, 0x00, 0x01, 0x8b, 0xfd, 0xa7, 0x07, 0xb6, 0xfc, 0xf7, 0x0a, 0x66, 0x79, 0x21, 0xb3])			
 			// latestBuf = Buffer.concat([latestBuf, bufffff]);
 			var packer = new MsgPacker(20, false);
-			packer.AddString("test");
+			packer.AddString(argv[1] ? argv[1] : "nameless tee");
 			packer.AddString("");
 			packer.AddInt(-1); /* country */
-			packer.AddString("pinky"); /* skin */
+			packer.AddString("greyfox"); /* skin */
 			packer.AddInt(1); /* use custom color */
-			packer.AddInt(7667531); /* color body */
-			packer.AddInt(11468598); /* color feet */
+			packer.AddInt(10346103); /* color body */
+			packer.AddInt(65535); /* color feet */
 			console.log(ack, "THIS IS READY SENMD STARTINFO! SEND STUFF OR SMTH?!")
 			SendMsgEx(packer, 1);
 			// socket.send(latestBuf, 0, latestBuf.length, port, host, (err, bytes) => {
@@ -351,6 +373,7 @@ function join(host, port) {
 }
 function getPcd(ack, size, flags) {
     pcd = []
+	
     if (flags & 1) {
         ack = (ack+1)%(1<<10); /* max sequence */
     }
@@ -362,8 +385,7 @@ function getPcd(ack, size, flags) {
     pcd[2] = ack&0xff
     return pcd
 }
-var a = {"host": "51.195.119.197", "port": 8304}
-var argv = process.argv.slice(2)
+var a = {"host": "51.210.171.47", "port": 7303}
 if (argv.length)
 	a = {"host": argv[0].split(":")[0], "port": argv[0].split(":")[1]}
 console.log(argv, argv.length, a)

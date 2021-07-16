@@ -189,18 +189,42 @@ var messageUUIDs = {
 // Packer.AddInt(1); /* use custom color */
 // Packer.AddInt(7667531); /* color body */
 // Packer.AddInt(11468598); /* color feet */
-var packer = new MsgPacker(20, false);
-packer.AddString("test"); /* name */
-packer.AddString(""); /* clan */
-packer.AddInt(-1); /* country */
-packer.AddString("pinky"); /* skin */
-packer.AddInt(1); /* use custom color */
-packer.AddInt(7667531); /* color body */
-packer.AddInt(11468598); /* color feet */
+// var packer = new MsgPacker(20, false);
+// packer.AddString("test"); /* name */
+// packer.AddString(""); /* clan */
+// packer.AddInt(-1); /* country */
+// packer.AddString("pinky"); /* skin */
+// packer.AddInt(1); /* use custom color */
+// packer.AddInt(7667531); /* color body */
+// packer.AddInt(11468598); /* color feet */
+function getPcd(ack, size, flags) {
+    pcd = []
+	
+    if (flags & 1) {
+        ack = (ack+1)%(1<<10); /* max sequence */
+    }
+    pcd[0] = ((flags&3)<<6)|((size>>4)&0x3f)
+    pcd[1] = size & 0xf
+    if (flags&1) {
+       pcd[1] |= (ack>>2)&0xf0 
+    }
+    pcd[2] = ack&0xff
+    return pcd
+}
+var packer = new MsgPacker(1, true);
+packer.AddString("0.6 626fce9a778df4d4");
+packer.AddString("");
 // var packer = new MsgPacker(1, true);
 // packer.AddString("0.6 626fce9a778df4d4")
-console.log(packer.get)
-console.log(Buffer.from("287465737400004070696e6b7900018bfda707b6fcf70a", "hex"))
+ack = 0;
+pcd = getPcd(ack, packer.size, 1|4)
+console.log(Buffer.concat([Buffer.from([0x0, ack, 0x1, pcd[0], pcd[1], pcd[2]]), packer.get]))
+latestBuf = Buffer.from("0.6 626fce9a778df4d4")
+latestBuf = Buffer.concat([Buffer.from([0x0, 0x0, 0x1, 0x41, 0x07, 0x1, 0x3]), latestBuf, Buffer.from([0, 0])])
+console.log(latestBuf)
+console.log(Buffer.from("00000141070003302e36203632366663653961373738646634643400006c123bbe", "hex"))
+console.log(Buffer.from("00000141070103302e36203632366663653961373738646634643400007e4f2e1c", "hex"))
+// console.log(Buffer.from("287465737400004070696e6b7900018bfda707b6fcf70a", "hex"))
 /*pub const WHAT_IS: Uuid = Uuid::from_u128(0x245e5097_9fe0_39d6_bf7d_9a29e1691e4c);
 pub const IT_IS: Uuid = Uuid::from_u128(0x6954847e_2e87_3603_b562_36da29ed1aca);
 pub const I_DONT_KNOW: Uuid = Uuid::from_u128(0x416911b5_7973_33bf_8d52_7bf01e519cf0);
