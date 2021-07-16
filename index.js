@@ -1,81 +1,3 @@
-class MinecraftProtocol {
-	static writeVarInt(val) {
-		// "VarInts are never longer than 5 bytes"
-		// https://wiki.vg/Data_types#VarInt_and_VarLong
-		const buf = Buffer.alloc(5)
-		// let written = 0
-
-		// while (true) {
-		// 	if ((val & 0xFFFFFF80) === 0) {
-		// 		buf.writeUInt8(val, written++)
-		// 		break
-		// 	} else {
-		// 		buf.writeUInt8(val & 0x7F | 0x80, written++)
-		// 		val >>>= 7
-		// 	}
-		// }
-		// return val;
-		return Buffer.from([16, 0, 0])
-		// return buf.slice(0, written)
-	}
-	static writeVarIn2t(val) {
-		// "VarInts are never longer than 5 bytes"
-		// https://wiki.vg/Data_types#VarInt_and_VarLong
-		const buf = Buffer.alloc(5)
-		let written = 0
-
-		while (true) {
-			if ((val & 0xFFFFFF80) === 0) {
-				buf.writeUInt8(val, written++)
-				break
-			} else {
-				buf.writeUInt8(val & 0x7F | 0x80, written++)
-				val >>>= 7
-			}
-		}
-		return buf.slice(0, written)
-	}
-
-	static writeString(val) {
-		return Buffer.from(val, 'UTF-8')
-	}
-
-	static writeUShort(val) {
-		return Buffer.from([val >> 8, val & 0xFF])
-	}
-
-	static concat(chunks) {
-		let length = 0
-
-		for (const chunk of chunks) {
-			length += chunk.length
-		}
-
-		const buf = [
-			MinecraftProtocol.writeVarInt(length),
-			...chunks
-		]
-
-		return Buffer.concat(buf)
-	}
-}
-test = MinecraftProtocol.concat([
-	MinecraftProtocol.writeVarInt(20),
-	MinecraftProtocol.writeString("name"),
-	MinecraftProtocol.writeString(""),
-	MinecraftProtocol.writeVarInt(-1),
-	MinecraftProtocol.writeString("pinky"),
-	MinecraftProtocol.writeVarInt(1),
-	MinecraftProtocol.writeVarInt(7667531), /* color body */
-	MinecraftProtocol.writeVarInt(11468598), /* color feet */
-])
-test2 = MinecraftProtocol.concat([
-	MinecraftProtocol.writeVarInt(16),
-	MinecraftProtocol.writeString("TKEN"),
-	// MinecraftProtocol.writeVarInt(0),
-	// MinecraftProtocol.writeVarInt(0),
-])
-
 function arrStartsWith(arr, arrStart, start=0) {
 	arr.splice(0, start)
     for (let i = 0; i < arrStart.length; i++) {
@@ -92,8 +14,6 @@ const SocksClient = require('socks').SocksClient;
 // startinfo: 
 "\x00\x04\x01\x41\x07\x03\x28\x74\x65\x73\x74\x00\x00\x40\x70\x69\x6e\x6b\x79\x00\x01\x8b\xfd\xa7\x07\xb6\xfc\xf7\x0a\x1d\x56\xdb\x98"
 "\x10\x00\x00\x10\x00\x00\x74\x65\x73\x74\x10\x00\x00\x70\x69\x6e\x6b\x79\x10\x00\x00\x10\x00\x00\x10\x00\x00\x0d\x6b\xa4\x88"
-console.log(test.toString())
-console.log(test2.toString())
 
 var a = {"host": "51.195.119.197", "port": 8304}
 "\x10\x00\x00\x01\x54\x4b\x45\x4e\xff\xff\xff\xff"
