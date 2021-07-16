@@ -10,6 +10,8 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "net": "^1.0.2"
+    "net": "^1.0.2",
+    "socks": "^2.6.1",
+    "socks5-http-client": "^1.0.4"
   }
 }

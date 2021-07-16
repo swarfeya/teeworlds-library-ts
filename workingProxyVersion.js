@@ -1,6 +1,5 @@
 const net = require('dgram')
 const process = require('process')
-bufffff = Buffer.from([255, 255, 255, 255])
 function arrStartsWith(arr, arrStart, start=0) {
     arr.splice(0, start)
     for (let i = 0; i < arrStart.length; i++) {
@@ -51,6 +50,11 @@ class MsgPacker {
 	}
 	get buffer() {
 		return this.result
+	}
+}
+class Client {
+	constructor(ip, port, name="nameless tee") {
+		this.ip = ip;
 	}
 }
 process.on("exit", () => {
@@ -125,18 +129,68 @@ function Unpack(packet=Buffer.from()) {
 	return unpacked
 }
 
-
+var Socks = require('socks')
+const SocksClient = require('socks').SocksClient;
+var serverInfos = [];
 // startinfo: 
 "\x00\x04\x01\x41\x07\x03\x28\x74\x65\x73\x74\x00\x00\x40\x70\x69\x6e\x6b\x79\x00\x01\x8b\xfd\xa7\x07\xb6\xfc\xf7\x0a\x1d\x56\xdb\x98"
 "\x10\x00\x00\x10\x00\x00\x74\x65\x73\x74\x10\x00\x00\x70\x69\x6e\x6b\x79\x10\x00\x00\x10\x00\x00\x10\x00\x00\x0d\x6b\xa4\x88"
 
-var socket = net.createSocket("udp4");
-socket.bind(13337)
+// socket.bind(13337)
 "\x10\x00\x00\x01\x54\x4b\x45\x4e\xff\xff\xff\xff"
 "\x10\x00\x00\x54\x4b\x45\x4e\xff\xff\xff\xff"
-function join(host, port) {
+function join(host, port, proxy, index) {
+	var bufffff = Buffer.from([255, 255, 255, 255])
 	var onetime = []
 	var latestBuf;
+	var joined = false;
+	_port = Math.floor(Math.random()*65535)
+	const options = {
+		proxy,
+	
+		command: 'associate',
+	
+		// When using associate, the destination should be the remote client that is expected to send UDP packets to the proxy server to be forwarded. This should be your local ip, or optionally the wildcard address (0.0.0.0)  UDP Client <-> Proxy <-> UDP Client
+		destination: {
+			host: '***REMOVED***',
+			port: _port
+		}
+	};
+	var socket = net.createSocket("udp4");
+	socket.bind()
+	let client = new SocksClient(options);
+	client.connect();
+	client.on("error", err => {
+		console.log(err)
+		// remove proxy
+		if (proxies.indexOf(`${proxy.host}:${proxy.port}`) != -1)
+			proxies.splice(proxies.indexOf(`${proxy.host}:${proxy.port}`), 1)
+		else
+			console.log("wtf proxy not in proxies?", proxy)
+		fs.writeFileSync(__dirname + "\\socks5.txt", proxies.join("\n"));
+	})
+	var hostInfo;
+	// function sendProxy() {
+	// }
+	setTimeout(() => {
+		if (!bufffff.compare(Buffer.from([255,255,255,255])))  {
+			// TKEN not set after 30 seconds -> remove proxy
+			if (proxies.indexOf(`${proxy.host}:${proxy.port}`) != -1)
+				proxies.splice(proxies.indexOf(`${proxy.host}:${proxy.port}`), 1)
+			else
+				console.log("wtf proxy not in proxies?", proxy)
+			fs.writeFileSync(__dirname + "\\socks5.txt", proxies.join("\n"));
+			console.log(`removed proxy ${proxy.host}:${proxy.port} from proxies!`)
+
+		} else {
+			var workingProxies = fs.readFileSync(__dirname + "\\workingProxies.txt")
+			if (!workingProxies.toString().includes(`${proxy.host}:${proxy.port}`)) {
+				fs.appendFileSync(__dirname + "\\workingProxies.txt", `${proxy.host}:${proxy.port}\n`);
+				console.log(`added proxy ${proxy.host}:${proxy.port} to workingProxies!`)
+			}
+		}
+	}, 30000)
+
 	var State = 0; // 0 = offline; 1 = STATE_CONNECTING = 1, STATE_LOADING = 2, STATE_ONLINE = 3
 	var ack = 0;
 	var clientAck = 1;
@@ -147,7 +201,11 @@ function join(host, port) {
 		return new Promise((resolve, reject) => {
 			latestBuf = Buffer.from([0x10, ack&0xff, 0x00, msg])
 			latestBuf = Buffer.concat([latestBuf, Buffer.from(ExtraMsg), bufffff])
-			socket.send(latestBuf, 0, latestBuf.length, port, host, (err, bytes) => {
+			var packet = SocksClient.createUDPFrame({
+				remoteHost: { host: host, port: port },
+				data: latestBuf
+			});
+			socket.send(packet, 0, packet.length, hostInfo.port, hostInfo.host, (err, bytes) => {
 				// console.log(`sent controlmsg ${msg} with ack: `, ack, bytes)	
 				resolve(bytes)
 			})
@@ -175,13 +233,53 @@ function join(host, port) {
 		// latestBuf = Buffer.concat([latestBuf, Msg.buffer, bufffff])
 		latestBuf = Buffer.from([0x0, ack, 0x1, pcd[0], pcd[1], clientAck]);
 		var latestBuf = Buffer.concat([latestBuf, Msg.buffer, bufffff]);
-		socket.send(latestBuf, 0, latestBuf.length, port, host, (err, bytes) => {
+		var packet = SocksClient.createUDPFrame({
+			remoteHost: { host: host, port: port },
+			data: latestBuf
+		});
+		socket.send(packet, 0, packet.length, hostInfo.port, hostInfo.host, (err, bytes) => {
 			console.log(`sent Msg with ack ${ack}, ${clientAck}: `, latestBuf)	
 		})
 	}
+	client.on('established', info => {
+		console.log(info.remoteHost);
+		hostInfo = info.remoteHost;
+		serverInfos[index] = {hostInfo, "connected": false}
+		// var latestBuf;
+		// latestBuf = Buffer.from([16, 0, 0, 1, "T".charCodeAt(0), "K".charCodeAt(0), "E".charCodeAt(0), "N".charCodeAt(0), bufffff])
+		// latestBuf = Buffer.concat([latestBuf, bufffff])
+		// var packet = SocksClient.createUDPFrame({
+		// 	remoteHost: { host: host, port: port },
+		// 	data: latestBuf
+		// });
+		// socket.send(packet, 0, packet.length, info.remoteHost.port, info.remoteHost.host, (err, bytes) => {
+		// 	console.log(err, bytes)
+		// })
+		process.stdin.on("data", data => {
+			if (lastMsg != data && State == 3) {
+				lastMsg = data;
+				data = data.slice(0, -2)
+				var packer = new MsgPacker(17, false);
+				packer.AddInt(0); // team
+				packer.AddString(data.toString() + '\n');
+				var pcd = getPcd(ack, packer.size, 1); 
+				var latestBuf = Buffer.from([0x0, ack, 0x01, pcd[0], pcd[1], pcd[2]])
+				latestBuf = Buffer.concat([latestBuf, packer.buffer, bufffff])
+				SendMsgEx(packer, 1);
+	
+			}
+		})
+		process.on("SIGINT", () => { // on ctrl + c
+			console.log("BYE! sending disconnect..")
+			SendControlMsg(4).then(() => {
+				process.exit()
+			})
+		});
 	SendControlMsg(1, "TKEN");
 	time = new Date().getTime() + 2000;
 	socket.on("message", a => {
+		a = SocksClient.parseUDPFrame(a).data;
+
 		unpacked = Unpack(a)
 		if (unpacked.twprotocol.flags != 128 && unpacked.twprotocol.ack) {
 			clientAck = unpacked.twprotocol.ack+1;
@@ -192,7 +290,7 @@ function join(host, port) {
 					if (a.seq != undefined && a.seq != -1)
 						ack = a.seq
 					
-					console.log(a.msg + " is not snap, new ack: " + ack, a.sequence + ", new clientAck: " + clientAck);
+					console.log(a.msg + " is not snap, new ack: " + ack, a.sequence + ", new clientAck: " + clientAck, hostInfo);
 				}
 			})
 		}
@@ -239,7 +337,7 @@ function join(host, port) {
 		}
 		else {
 			
-			console.log("invalid packet: ", unpacked, ack)
+			console.log("invalid packet: ",  ack)
 			// socket.disconnect()
 		}
 		if (new Date().getTime() - time >= 1000) {
@@ -277,27 +375,8 @@ function join(host, port) {
 		// console.log(bufffff.toJSON().data)
 		
 	})
-	process.stdin.on("data", data => {
-		if (lastMsg != data && State == 3) {
-			lastMsg = data;
-			data = data.slice(0, -2)
-			var packer = new MsgPacker(17, false);
-			packer.AddInt(0); // team
-			packer.AddString(data.toString() + '\n');
-			var pcd = getPcd(ack, packer.size, 1); 
-			var latestBuf = Buffer.from([0x0, ack, 0x01, pcd[0], pcd[1], pcd[2]])
-			latestBuf = Buffer.concat([latestBuf, packer.buffer, bufffff])
-			SendMsgEx(packer, 1);
 
-		}
 	})
-	process.on("SIGINT", () => { // on ctrl + c
-		console.log("BYE! sending disconnect..")
-		SendControlMsg(4).then(() => {
-			process.exit()
-		})
-	})
-
 }
 function getPcd(ack, size, flags) {
     pcd = []
@@ -317,7 +396,21 @@ var a = {"host": "51.210.171.47", "port": 7303}
 if (argv.length)
 	a = {"host": argv[0].split(":")[0], "port": argv[0].split(":")[1]}
 console.log(argv, argv.length, a)
-join(a.host, a.port)
+// join(a.host, a.port)
+var fs = require('fs')
+var proxies = fs.readFileSync(__dirname + "\\socks5.txt")
+			.toString()
+			.replace(/\r/g, "")
+			.split("\n")
+			.filter(a => a) // filter empty out
+process.setMaxListeners(proxies.length)
+for (var i = 0; i < proxies.length; i++) {
+		join(a.host, a.port, {
+			host: proxies[i].split(":")[0], // ipv4, ipv6, or hostname
+			port: parseInt(proxies[i].split(":")[1]),
+			type: 5
+		}, i)
+}
 /*
 socket.on("connect", () => {
 	socket.write(test2)
