@@ -135,7 +135,7 @@ class Client {
 	SendMsgEx(Msg, Flags) {
 		if (!Msg instanceof MsgPacker) 
 			return;
-		var pcd = getPcd(this.ack, Msg.size, Flags); 
+		var pcd = [] 
 		// mpd = (*mpd << 1) | sys; /* store system flag in msg id */
 		// if(Flags&1)
 			// ack = (ack+1)%(1<<10); /* max sequence */
@@ -154,7 +154,7 @@ class Client {
 		latestBuf = Buffer.from([0x0, this.ack, 0x1, pcd[0], pcd[1], this.clientAck]);
 		var latestBuf = Buffer.concat([latestBuf, Msg.buffer, this.bufffff]);
 		this.socket.send(latestBuf, 0, latestBuf.length, this.port, this.host, (err, bytes) => {
-			console.log(`sent Msg with ack ${this.ack}, ${this.clientAck}: `, latestBuf)	
+			// console.log(`sent Msg with ack ${this.ack}, ${this.clientAck}: `, latestBuf)	
 		})
 	}
 	connect() {
@@ -171,7 +171,7 @@ class Client {
 						if (a.seq != undefined && a.seq != -1)
 							this.ack = a.seq
 						
-						console.log(a.msg + " is not snap, new ack: " + this.ack, a.sequence + ", new clientAck: " + this.clientAck);
+						// console.log(a.msg + " is not snap, new ack: " + this.ack, a.sequence + ", new clientAck: " + this.clientAck);
 					}
 				})
 			}
@@ -193,7 +193,7 @@ class Client {
 				this.SendMsgEx(Msg, 1);
 			} else if ((unpacked.chunks[0] && chunkMessages.includes("CON_READY") || unpacked.chunks[0] && chunkMessages.includes("SV_MOTD"))) {
 				var packer = new MsgPacker(20, false);
-				packer.AddString(argv[1] ? argv[1] : "nameless tee"); /* name */
+				packer.AddString(this.name); /* name */
 				packer.AddString(""); /* clan */
 				packer.AddInt(-1); /* country */
 				packer.AddString("greyfox"); /* skin */
@@ -272,94 +272,18 @@ var messageUUIDs = {
 }
 var argv = process.argv.slice(2)
 
-function Unpack(packet=Buffer.from()) {
-	// var sys = (i) => { return {"type": i&1 ? "sys" : "game", "msgid": (i-(i&1))/2, "msg": messageTypes[i&1][(i-(i&1))/2], "ye": i.toString(16)}}
-	var unpacked = {twprotocol: {flags: packet[0], ack: packet[1], chunkAmount: packet[2], size: packet.byteLength-3}, chunks: []}
-	
-	// console.log(unpacked)
-	
-	if (unpacked.twprotocol.flags == 0x10 || unpacked.twprotocol.flags == 128)
-		return unpacked;
-	if (packet.indexOf(Buffer.from([0xff,0xff,0xff,0xff])) == 0)
-		return unpacked;
-	packet = packet.slice(3)
-	for (let i = 0; i < unpacked.twprotocol.chunkAmount; i++) {
-		chunk = {}
-		// chunk.preraw = packet;
-		chunk.bytes = ((packet[0] & 0x3f) << 4) | (packet[1] & ((1 << 4) - 1)); // idk what this shit is but it works
-		// if (i == unpacked.twprotocol.chunkAmount-1) 
-			// console.log("last", packet.slice(0, chunk.bytes))
-		chunk.flags = (packet[0] >> 6) & 3;
-		chunk.sequence = -1;
-		
-		if (chunk.flags & 1) {
-			chunk.sequence = ((packet[1] & (~((1 << 4) - 1))) << 2) | packet[2];
-			chunk.seq = ((packet[1]&0xf0)<<2) | packet[2];
-			packet = packet.slice(3) // remove flags & size
-		} else
-			packet = packet.slice(2)
-		// if (Object.keys(messageUUIDs).includes())
-		// console.log(packet[0].toString(16), packet[1].toString(16))
-		chunk.type = packet[0] & 1 ? "sys" : "game"; // & 1 = binary, ****_***1. e.g 0001_0111 sys, 0001_0110 game
-		chunk.msgid = (packet[0]-(packet[0]&1))/2;
-		chunk.msg = messageTypes[packet[0]&1][chunk.msgid];
-		// chunk.ye = packet[0].toString(16)
-		// console.log(sys(packet[1]))
-		chunk.raw = packet.slice(0, chunk.bytes)
-		Object.values(messageUUIDs).forEach((a, i) => {
-			if (a.compare(packet.slice(1, 17)) == 0) {
-				chunk.extended_msgid = a;
-				// chunk.type = 'sys';
-				chunk.msg = Object.keys(messageUUIDs)[i];
-			}
-		})
-		
-		// chunk.raw = chunk.raw.toJSON().data.map(a => a.toString(16))
-		// chunk.len = chunk.raw.length
-		// chunk.raw = chunk.raw.map(a => parseInt(a, 16))
-		// chunk.raw = Buffer.from(chunk.raw)
-		packet = packet.slice(chunk.bytes) // +1 cuz it adds an extra \x00 for easier parsing i guess
-		unpacked.chunks.push(chunk)
-	}
-	return unpacked
-}
-
-
-
-function getPcd(ack, size, flags) {
-    pcd = []
-	
-    if (flags & 1) {
-        ack = (ack+1)%(1<<10); /* max sequence */
-    }
-    pcd[0] = ((flags&3)<<6)|((size>>4)&0x3f)
-    pcd[1] = size & 0xf
-    if (flags&1) {
-       pcd[1] |= (ack>>2)&0xf0 
-    }
-    pcd[2] = ack&0xff
-    return pcd
-}
 var a = {"host": "51.210.171.47", "port": 7303}
 if (argv.length)
 	a = {"host": argv[0].split(":")[0], "port": argv[0].split(":")[1]}
-console.log(argv, argv.length, a)
-// join(a.host, a.port)
-var client = new Client(a.host, a.port, "test");
+var client = new Client(a.host, a.port, argv[1] ? argv[1] : "nameless tee");
 client.connect();
 process.stdin.on("data", data => {
-	// if (lastMsg != data && State == 3) {
-		// lastMsg = data;
 		data = data.slice(0, -2)
 		var packer = new MsgPacker(17, false);
 		packer.AddInt(0); // team
 		packer.AddString(data.toString() + '\n');
-		var pcd = getPcd(client.ack, packer.size, 1); 
-		var latestBuf = Buffer.from([0x0, client.ack, 0x01, pcd[0], pcd[1], pcd[2]])
-		latestBuf = Buffer.concat([latestBuf, packer.buffer, client.bufffff])
 		client.SendMsgEx(packer, 1);
 
-	// }
 })
 process.on("SIGINT", () => { // on ctrl + c
 	console.log("BYE! sending disconnect..")
@@ -367,11 +291,3 @@ process.on("SIGINT", () => { // on ctrl + c
 		process.exit()
 	})
 })
-/*
-socket.on("connect", () => {
-	socket.write(test2)
-})
-socket.on("data", (a) => {
-	console.log(a)
-})*/
-// console.log()
