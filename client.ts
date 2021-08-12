@@ -58,9 +58,9 @@ class Client extends EventEmitter {
 	proxy?: SocksProxy;
 	proxyMode: boolean;
 	socket: net.Socket;
-	bufffff: Buffer;
+	TKEN: Buffer;
 	time: number;
-	client?: SocksClient;
+	socksClient?: SocksClient;
 	hostInfo?: SocksRemoteHost; 
 	// latestBuf: Buffer;
 	// hostInfo: object;
@@ -72,11 +72,11 @@ class Client extends EventEmitter {
 		// this.onetime = []
 		this.index = id;
 		this.State = 0; // 0 = offline; 1 = STATE_CONNECTING = 1, STATE_LOADING = 2, STATE_ONLINE = 3
-		this.ack = 0;
-		this.clientAck = 1;
-		this.receivedSnaps = 0; /* wait for 2 ss before seeing self as connected */
+		this.ack = 0; // ack of messages the client has received
+		this.clientAck = 1; // ack of messages the client has sent
+		this.receivedSnaps = 0; /* wait for 2 snaps before seeing self as connected */
 		this.lastMsg = "";
-		this.hostInfo;
+		this.hostInfo; // hostinfo of the proxy
 		this._port = Math.floor(Math.random()*65535)
 		this.proxyMode = Boolean(proxy)
 		this.socket = net.createSocket("udp4")
@@ -94,9 +94,9 @@ class Client extends EventEmitter {
 					port: this._port
 				}
 			};
-			this.client = new SocksClient(options);
-			this.client.connect();
-			this.client.on("error", err => {
+			this.socksClient = new SocksClient(options);
+			this.socksClient.connect();
+			this.socksClient.on("error", err => {
 				console.log("CRASH CRASH CRASH!!!", err)
 				// this.emit("error", err, this.index);
 				// remove proxy
@@ -114,8 +114,8 @@ class Client extends EventEmitter {
 			
 		}
 		this.hostInfo;
-		this.bufffff = Buffer.from([255, 255, 255, 255])
-		this.time = new Date().getTime()+2000;
+		this.TKEN = Buffer.from([255, 255, 255, 255])
+		this.time = new Date().getTime()+2000; // time (used for keepalives, start to send keepalives after 2 seconds)
 		this.State = 0;
 	}
 	Unpack(packet: Buffer): _packet {
@@ -173,7 +173,7 @@ class Client extends EventEmitter {
 		return new Promise((resolve, reject) => {
 			
 			var latestBuf = Buffer.from([0x10+(((16<<4)&0xf0)|((this.ack>>8)&0xf)), this.ack&0xff, 0x00, msg])
-			latestBuf = Buffer.concat([latestBuf, Buffer.from(ExtraMsg), this.bufffff])
+			latestBuf = Buffer.concat([latestBuf, Buffer.from(ExtraMsg), this.TKEN]) // move header (latestBuf), optional extraMsg & TKEN into 1 buffer
 			if (this.proxyMode) {
 				var packet = SocksClient.createUDPFrame({
 					remoteHost: { host: this.host, port: this.port },
@@ -190,30 +190,34 @@ class Client extends EventEmitter {
 					resolve(bytes)
 				})
 			}
-			setTimeout(() => { resolve("failed, rip") }, 2000)
-		})
+			setTimeout(() => { resolve("failed, rip") }, 2000) 
+			/* 	after 2 seconds it was probably not able to send, 
+				so when sending a quit message the user doesnt
+				stay stuck not being able to ctrl + c
+		*/
+	})
 	}
 	SendMsgEx(Msg: typeof MsgPacker, Flags: number) {
 		// if (!Msg instanceof MsgPacker) 
 			// return;
-		var pcd = [] 
+		var header = [] 
 		// mpd = (*mpd << 1) | sys; /* store system flag in msg id */
 		// if(Flags&1)
 			// ack = (ack+1)%(1<<10); /* max sequence */
 		// pcd = Msg.buffer;
-		pcd[0] = ((Flags&3)<<6)|((Msg.size>>4)&0x3f);
-		pcd[1] = (Msg.size&0xf);
+		header[0] = ((Flags&3)<<6)|((Msg.size>>4)&0x3f); 
+		header[1] = (Msg.size&0xf);
 		if(Flags&1) {
-			pcd[1] |= (this.clientAck>>2)&0xf0;
-			pcd[2] = this.clientAck&0xff;
+			header[1] |= (this.clientAck>>2)&0xf0;
+			header[2] = this.clientAck&0xff;
 		} 	
 		// if (Msg.sys)
 		// var latestBuf = Buffer.from([0x0, ack, 0x01, pcd[0], pcd[1], pcd[2]])
 		// else
 			// var latestBuf = Buffer.from([0x0, ack, 0x01, pcd[0], pcd[1], clientAck])
 		// latestBuf = Buffer.concat([latestBuf, Msg.buffer, bufffff])
-		var latestBuf = Buffer.from([0x0+(((16<<4)&0xf0)|((this.ack>>8)&0xf)), this.ack&0xff, 0x1, pcd[0], pcd[1], this.clientAck]);
-		var latestBuf = Buffer.concat([latestBuf, Msg.buffer, this.bufffff]);
+		var latestBuf = Buffer.from([0x0+(((16<<4)&0xf0)|((this.ack>>8)&0xf)), this.ack&0xff, 0x1, header[0], header[1], this.clientAck]);
+		var latestBuf = Buffer.concat([latestBuf, Msg.buffer, this.TKEN]);
 		if (this.proxyMode) {
 			var packet = SocksClient.createUDPFrame({
 				remoteHost: { host: this.host, port: this.port },
@@ -232,8 +236,8 @@ class Client extends EventEmitter {
 		}
 	}
 	connect() {
-		if (this.proxyMode && this.client) {
-			this.client.on("established", (info) => {
+		if (this.proxyMode && this.socksClient) {
+			this.socksClient.on("established", (info) => {
 				console.log(info.remoteHost);
 				this.hostInfo = info.remoteHost;
 				this.SendControlMsg(1, "TKEN")
@@ -277,7 +281,7 @@ class Client extends EventEmitter {
 			})
 		}
 		if (a.toString().includes("TKEN") || arrStartsWith(a.toJSON().data, [0x10, 0x0, 0x0, 0x0])) {
-			this.bufffff = Buffer.from(a.toJSON().data.slice(a.toJSON().data.length-4, a.toJSON().data.length))
+			this.TKEN = Buffer.from(a.toJSON().data.slice(a.toJSON().data.length-4, a.toJSON().data.length))
 			this.SendControlMsg(3);
 			this.State = 2; // loading state
 			var packer = new MsgPacker(1, true);
@@ -307,7 +311,7 @@ class Client extends EventEmitter {
 		} else if (unpacked.chunks[0] && chunkMessages.includes("SV_READY_TO_ENTER")) {
 			
 			if (this.State != 3) {
-				console.log("crash cause 19123?")
+				// console.log("crash cause 19123?")
 				this.emit('connected', this.index);
 			}
 			this.State = 3
@@ -324,7 +328,7 @@ class Client extends EventEmitter {
 				this.State = 3
 			}
 		} else if (unpacked.twprotocol.flags == 128 || unpacked.twprotocol.flags == 0x10) { // also skip compressed & control messages
-
+			// flag 128 = compression flag
 		} 
 		else {
 			
