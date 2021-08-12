@@ -2,3 +2,8 @@ node_modules
 *.cpp
 socks5.txt
 workingProxies.txt
+*.js
+*.txt
+test.js
+test2.js
+compress.js
