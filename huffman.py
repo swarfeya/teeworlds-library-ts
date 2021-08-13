@@ -1,4 +1,4 @@
-# from Learath2, found on ddnet discord
+# from Ryozuki, found on ddnet discord ( 11.10.2018 )
 from typing import List
 from sys import argv
 FREQ_TABLE = [
@@ -218,5 +218,7 @@ class Huffman:
 
         return output
 huff = Huffman(frequencies=FREQ_TABLE)
-if (argv[1]):
+if (argv[1] and argv[2] == "-decompress"):
 	print(list(huff.decompress(bytearray.fromhex(argv[1]))))
+elif (argv[1] and argv[2] == "-compress"):
+    print(list(huff.compress(bytearray.fromhex(argv[1]))))

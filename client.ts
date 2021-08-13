@@ -7,6 +7,8 @@ import { SocksClient, SocksClientOptions, SocksProxy, SocksRemoteHost } from 'so
 import fs from 'fs';
 // import * from fs as 'fs';
 import { EventEmitter } from 'stream';
+import { spawn } from 'child_process';
+
 interface chunk {
 	bytes?: number,
 	flags?: number, 
@@ -18,14 +20,44 @@ interface chunk {
 	raw?: Buffer,
 	extended_msgid?: Buffer;
 }
+function toHexStream(buff: Buffer): string {
+	return buff.toJSON().data.map(a => ('0' + (a & 0xff).toString(16)).slice(-2)).join("");
+}
+async function decompress(buff: Buffer): Promise<Buffer> {
+	return new Promise((resolve) => {
+		// get hex stream
+		var hexStream = toHexStream(buff)
+		// console.log(`"${hexStream}"`)
+		var ls = spawn('python', [__dirname + '\\huffman.py', hexStream, "-decompress"])
+		ls.stdout.on('data', (data) => {
+			resolve(Buffer.from(eval(data.toString()))); // convert stdout array to actual array, then convert the array to Buffer & return it
+		});
+		setTimeout(() => {
+			ls.stdin.end();
+			ls.stdout.destroy();
+			ls.stderr.destroy();
+
+			resolve(Buffer.from([]));
+		}, 750)
+		ls.stderr.on('data', (data) => {
+			console.error(`stderr: ${data}`);
+		});
+		
+		ls.on('close', (code) => {
+			console.log(`child process exited with code ${code}`);
+		});
+	})
+}
 interface _packet {
 	twprotocol: { flags: number, ack: number, chunkAmount: number, size: number },
 	chunks: chunk[]
 }
+
 var messageTypes = [
 	["none, starts at 1", "SV_MOTD", "SV_BROADCAST", "SV_CHAT", "SV_KILL_MSG", "SV_SOUND_GLOBAL", "SV_TUNE_PARAMS", "SV_EXTRA_PROJECTILE", "SV_READY_TO_ENTER", "SV_WEAPON_PICKUP", "SV_EMOTICON", "SV_VOTE_CLEAR_OPTIONS", "SV_VOTE_OPTION_LIST_ADD", "SV_VOTE_OPTION_ADD", "SV_VOTE_OPTION_REMOVE", "SV_VOTE_SET", "SV_VOTE_STATUS", "CL_SAY", "CL_SET_TEAM", "CL_SET_SPECTATOR_MODE", "CL_START_INFO", "CL_CHANGE_INFO", "CL_KILL", "CL_EMOTICON", "CL_VOTE", "CL_CALL_VOTE", "CL_IS_DDNET", "SV_DDRACE_TIME", "SV_RECORD", "UNUSED", "SV_TEAMS_STATE", "CL_SHOW_OTHERS_LEGACY"], 
 	["none, starts at 1", "INFO", "MAP_CHANGE", "MAP_DATA", "CON_READY", "SNAP", "SNAP_EMPTY", "SNAP_SINGLE", "INPUT_TIMING", "RCON_AUTH_STATUS", "RCON_LINE", "READY", "ENTER_GAME", "INPUT", "RCON_CMD", "RCON_AUTH", "REQUEST_MAP_DATA", "PING", "PING_REPLY", "RCON_CMD_ADD", "RCON_CMD_REMOVE"]
 ]
+
 var messageUUIDs = {
 	"WHAT_IS": Buffer.from([0x24, 0x5e, 0x50, 0x97, 0x9f, 0xe0, 0x39, 0xd6, 0xbf, 0x7d, 0x9a, 0x29, 0xe1, 0x69, 0x1e, 0x4c]),
 	"IT_IS": Buffer.from([0x69, 0x54, 0x84, 0x7e, 0x2e, 0x87, 0x36, 0x03, 0xb5, 0x62, 0x36, 0xda, 0x29, 0xed, 0x1a, 0xca]),
@@ -35,6 +67,7 @@ var messageUUIDs = {
 	"CLIENT_VERSION": Buffer.from([0x8c, 0x00, 0x13, 0x04, 0x84, 0x61, 0x3e, 0x47, 0x87, 0x87, 0xf6, 0x72, 0xb3, 0x83, 0x5b, 0xd4]),
 	"CAPABILITIES": Buffer.from([0xf6, 0x21, 0xa5, 0xa1, 0xf5, 0x85, 0x37, 0x75, 0x8e, 0x73, 0x41, 0xbe, 0xee, 0x79, 0xf2, 0xb2]),
 }
+
 function arrStartsWith(arr: number[], arrStart: number[], start=0) {
 	arr.splice(0, start)
     for (let i = 0; i < arrStart.length; i++) {
@@ -118,17 +151,23 @@ class Client extends EventEmitter {
 		this.time = new Date().getTime()+2000; // time (used for keepalives, start to send keepalives after 2 seconds)
 		this.State = 0;
 	}
-	Unpack(packet: Buffer): _packet {
+	async Unpack(packet: Buffer): Promise<_packet> {
 		// var sys = (i) => { return {"type": i&1 ? "sys" : "game", "msgid": (i-(i&1))/2, "msg": messageTypes[i&1][(i-(i&1))/2], "ye": i.toString(16)}}
 		var unpacked: _packet = {twprotocol: {flags: packet[0], ack: packet[1], chunkAmount: packet[2], size: packet.byteLength-3}, chunks: []}
 		
 		// console.log(unpacked)
 		
-		if (unpacked.twprotocol.flags == 0x10 || unpacked.twprotocol.flags == 128)
-			return unpacked;
-		if (packet.indexOf(Buffer.from([0xff,0xff,0xff,0xff])) == 0)
+		if (packet.indexOf(Buffer.from([0xff,0xff,0xff,0xff])) == 0 && !(unpacked.twprotocol.flags & 8) || unpacked.twprotocol.flags == 255) // flags == 255 is connectionless (used for sending usernames)
 			return unpacked;
 		packet = packet.slice(3)
+		if (unpacked.twprotocol.flags & 128) {
+			packet = await decompress(packet)	
+			console.log(toHexStream(packet));
+			// console.log(packet)
+			if (packet.length == 1 && packet[0] == -1)
+				return unpacked
+		}
+		// return unpacked;
 		for (let i = 0; i < unpacked.twprotocol.chunkAmount; i++) {
 			var _chunk: chunk = {};
 			// chunk.preraw = packet;
@@ -248,17 +287,17 @@ class Client extends EventEmitter {
 		this.SendControlMsg(1, "TKEN")
 		this.time = new Date().getTime() + 2000;
 	}
-	this.socket.on("message", a => {
+	this.socket.on("message", async (a) => {
 		if (this.proxyMode)
 			a = SocksClient.parseUDPFrame(a).data;
 
-		var unpacked: _packet = this.Unpack(a)
+		var unpacked: _packet = await this.Unpack(a)
 		// console.log(unpacked)
 		if (unpacked.twprotocol.flags != 128 && unpacked.twprotocol.ack) {
 			this.clientAck = unpacked.twprotocol.ack+1;
 			unpacked.chunks.forEach(a => {
-				if (!a.msg)
-					console.log(unpacked)
+				// if (!a.msg)
+					// console.log(unpacked)
 				if (a.msg && !a.msg.startsWith("SNAP")) {
 					if (a.seq != undefined && a.seq != -1)
 						this.ack = a.seq
@@ -331,8 +370,8 @@ class Client extends EventEmitter {
 			// flag 128 = compression flag
 		} 
 		else {
-			
-			console.log("invalid packet: ", unpacked, this.ack)
+			// if (unpacked.msgid != NaN)
+			// console.log("invalid packet: ", unpacked, this.ack)
 			// socket.disconnect()
 		}
 		if (new Date().getTime() - this.time >= 1000) {
