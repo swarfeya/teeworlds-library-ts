@@ -123,11 +123,7 @@ class Client extends EventEmitter {
 			
 				// When using associate, the destination should be the remote client that is expected to send UDP packets to the proxy server to be forwarded. This should be your local ip, or optionally the wildcard address (0.0.0.0)  UDP Client <-> Proxy <-> UDP Client
 				destination: {
-<<<<<<< HEAD
 					host: '***REMOVED***',
-=======
-					host: '***REMOVED***',
->>>>>>> parent of f1dc83b (a)
 					port: this._port
 				}
 			};
