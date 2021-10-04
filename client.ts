@@ -8,6 +8,7 @@ import fs from 'fs';
 // import * from fs as 'fs';
 import { EventEmitter } from 'stream';
 import { spawn } from 'child_process';
+import MsgUnpacker from './MsgUnpacker';
 
 interface chunk {
 	bytes?: number,
@@ -17,7 +18,7 @@ interface chunk {
 	type?: 'sys' | 'game',
 	msgid?: number,
 	msg?: string,
-	raw?: Buffer,
+	raw: Buffer,
 	extended_msgid?: Buffer;
 }
 function toHexStream(buff: Buffer): string {
@@ -30,34 +31,31 @@ async function decompress(buff: Buffer): Promise<Buffer> {
 		// console.log(`"${hexStream}"`)
 		var ls = spawn('python', [__dirname + '\\huffman.py', hexStream, "-decompress"])
 		ls.stdout.on('data', (data) => {
-			resolve(Buffer.from(eval(data.toString()))); // convert stdout array to actual array, then convert the array to Buffer & return it
+			resolve(Buffer.from(JSON.parse(data.toString()))); // convert stdout array to actual array, then convert the array to Buffer & return it
 		});
 		setTimeout(() => {
 			ls.stdin.end();
 			ls.stdout.destroy();
-			ls.stderr.destroy();
+			// ls.stderr.destroy();
 
 			resolve(Buffer.from([]));
 		}, 750)
-		ls.stderr.on('data', (data) => {
-			console.error(`stderr: ${data}`);
-		});
+
 		
-		ls.on('close', (code) => {
-			console.log(`child process exited with code ${code}`);
-		});
 	})
 }
 interface _packet {
 	twprotocol: { flags: number, ack: number, chunkAmount: number, size: number },
 	chunks: chunk[]
 }
+interface input {
+		[key: string]: number
+}
 
 var messageTypes = [
 	["none, starts at 1", "SV_MOTD", "SV_BROADCAST", "SV_CHAT", "SV_KILL_MSG", "SV_SOUND_GLOBAL", "SV_TUNE_PARAMS", "SV_EXTRA_PROJECTILE", "SV_READY_TO_ENTER", "SV_WEAPON_PICKUP", "SV_EMOTICON", "SV_VOTE_CLEAR_OPTIONS", "SV_VOTE_OPTION_LIST_ADD", "SV_VOTE_OPTION_ADD", "SV_VOTE_OPTION_REMOVE", "SV_VOTE_SET", "SV_VOTE_STATUS", "CL_SAY", "CL_SET_TEAM", "CL_SET_SPECTATOR_MODE", "CL_START_INFO", "CL_CHANGE_INFO", "CL_KILL", "CL_EMOTICON", "CL_VOTE", "CL_CALL_VOTE", "CL_IS_DDNET", "SV_DDRACE_TIME", "SV_RECORD", "UNUSED", "SV_TEAMS_STATE", "CL_SHOW_OTHERS_LEGACY"], 
 	["none, starts at 1", "INFO", "MAP_CHANGE", "MAP_DATA", "CON_READY", "SNAP", "SNAP_EMPTY", "SNAP_SINGLE", "INPUT_TIMING", "RCON_AUTH_STATUS", "RCON_LINE", "READY", "ENTER_GAME", "INPUT", "RCON_CMD", "RCON_AUTH", "REQUEST_MAP_DATA", "PING", "PING_REPLY", "RCON_CMD_ADD", "RCON_CMD_REMOVE"]
 ]
-
 var messageUUIDs = {
 	"WHAT_IS": Buffer.from([0x24, 0x5e, 0x50, 0x97, 0x9f, 0xe0, 0x39, 0xd6, 0xbf, 0x7d, 0x9a, 0x29, 0xe1, 0x69, 0x1e, 0x4c]),
 	"IT_IS": Buffer.from([0x69, 0x54, 0x84, 0x7e, 0x2e, 0x87, 0x36, 0x03, 0xb5, 0x62, 0x36, 0xda, 0x29, 0xed, 0x1a, 0xca]),
@@ -77,44 +75,73 @@ function arrStartsWith(arr: number[], arrStart: number[], start=0) {
     }
     return true;
 }
+
 class Client extends EventEmitter {
 	host: string;
 	port: number;
 	name: string;
-	index: number;
 	State: number; // 0 = offline; 1 = STATE_CONNECTING = 1, STATE_LOADING = 2, STATE_ONLINE = 3
 	ack: number;
 	clientAck: number;
 	receivedSnaps: number; /* wait for 2 ss before seeing self as connected */
-	lastMsg: string;
 	_port: number;
-	proxy?: SocksProxy;
 	proxyMode: boolean;
 	socket: net.Socket;
 	TKEN: Buffer;
 	time: number;
+	AckGameTick: number;
+	PredTick: number;
+	TimeLeft: number;
+	inputsSent: number;
+	lastInputsTime: number;
+	inputObject: input;
+	myIp: string;
+
+	index?: number;
+	proxy?: SocksProxy;
 	socksClient?: SocksClient;
-	hostInfo?: SocksRemoteHost; 
+	proxyHostInfo?: SocksRemoteHost; 
 	// latestBuf: Buffer;
 	// hostInfo: object;
-	constructor(ip: string, port: number, name: string, id: number, proxy?: SocksProxy) {
+	constructor(ip: string, port: number, name: string, id?: number, proxy?: SocksProxy) {
 		super();
 		this.host = ip;
 		this.port = port;
 		this.name = name;
 		// this.onetime = []
-		this.index = id;
+		if (id)
+			this.index = id;
 		this.State = 0; // 0 = offline; 1 = STATE_CONNECTING = 1, STATE_LOADING = 2, STATE_ONLINE = 3
 		this.ack = 0; // ack of messages the client has received
 		this.clientAck = 1; // ack of messages the client has sent
 		this.receivedSnaps = 0; /* wait for 2 snaps before seeing self as connected */
-		this.lastMsg = "";
-		this.hostInfo; // hostinfo of the proxy
+		this.proxyHostInfo; // hostinfo of the proxy
 		this._port = Math.floor(Math.random()*65535)
 		this.proxyMode = Boolean(proxy)
+		this.inputObject = {
+			m_Direction: 1,
+			m_TargetX: 1,
+			m_TargetY: 0,
+			m_Jump: 0,
+			m_Fire: 0,
+			m_Hook: 0,
+			m_PlayerFlags: 0,
+			m_WantedWeapon: 1,
+			m_NextWeapon: 0,
+			m_PrevWeapon: 0
+		}
+		this.AckGameTick = -1
+		this.PredTick = -1
+		this.TimeLeft = -1
+		this.inputsSent = 0
+		this.lastInputsTime = -1
+		this.myIp = ""
+
 		this.socket = net.createSocket("udp4")
 		this.socket.bind();
 		if (this.proxyMode && proxy) {
+			if (!this.myIp)
+				throw new Error("ip isnt set, its essential for proxy support");
 			this.proxy = proxy;
 			const options: SocksClientOptions = {
 				proxy: proxy,
@@ -123,16 +150,15 @@ class Client extends EventEmitter {
 			
 				// When using associate, the destination should be the remote client that is expected to send UDP packets to the proxy server to be forwarded. This should be your local ip, or optionally the wildcard address (0.0.0.0)  UDP Client <-> Proxy <-> UDP Client
 				destination: {
-					host: '***REMOVED***',
+					host: this.myIp,
 					port: this._port
 				}
 			};
 			this.socksClient = new SocksClient(options);
 			this.socksClient.connect();
 			this.socksClient.on("error", err => {
-				console.log("CRASH CRASH CRASH!!!", err)
 				// this.emit("error", err, this.index);
-				// remove proxy
+				// remove not working proxy
 				var proxies = fs.readFileSync(__dirname + "\\socks5.txt")
 					.toString()
 					.replace(/\r/g, "")
@@ -146,7 +172,7 @@ class Client extends EventEmitter {
 			})
 			
 		}
-		this.hostInfo;
+		this.proxyHostInfo;
 		this.TKEN = Buffer.from([255, 255, 255, 255])
 		this.time = new Date().getTime()+2000; // time (used for keepalives, start to send keepalives after 2 seconds)
 		this.State = 0;
@@ -157,19 +183,18 @@ class Client extends EventEmitter {
 		
 		// console.log(unpacked)
 		
-		if (packet.indexOf(Buffer.from([0xff,0xff,0xff,0xff])) == 0 && !(unpacked.twprotocol.flags & 8) || unpacked.twprotocol.flags == 255) // flags == 255 is connectionless (used for sending usernames)
+		if (packet.indexOf(Buffer.from([0xff,0xff,0xff,0xff])) == 0 && !(unpacked.twprotocol.flags & 8) || unpacked.twprotocol.flags == 255) // flags == 255 is connectionless (used for sending other user infos i guess)
 			return unpacked;
 		packet = packet.slice(3)
 		if (unpacked.twprotocol.flags & 128) {
 			packet = await decompress(packet)	
-			console.log(toHexStream(packet));
 			// console.log(packet)
 			if (packet.length == 1 && packet[0] == -1)
 				return unpacked
 		}
 		// return unpacked;
 		for (let i = 0; i < unpacked.twprotocol.chunkAmount; i++) {
-			var _chunk: chunk = {};
+			var _chunk: any = {};
 			// chunk.preraw = packet;
 			_chunk.bytes = ((packet[0] & 0x3f) << 4) | (packet[1] & ((1 << 4) - 1)); // idk what this shit is but it works
 			// if (i == unpacked.twprotocol.chunkAmount-1) 
@@ -203,28 +228,35 @@ class Client extends EventEmitter {
 			// chunk.len = chunk.raw.length
 			// chunk.raw = chunk.raw.map(a => parseInt(a, 16))
 			// chunk.raw = Buffer.from(chunk.raw)
-			packet = packet.slice(_chunk.bytes) // +1 cuz it adds an extra \x00 for easier parsing i guess
-			unpacked.chunks.push(_chunk)
+			packet = packet.slice(_chunk.bytes)
+			var chunk: chunk = _chunk;
+			unpacked.chunks.push(chunk)
 		}
 		return unpacked
 		}
 	SendControlMsg(msg: number, ExtraMsg: string = "") {
 		return new Promise((resolve, reject) => {
 			
-			var latestBuf = Buffer.from([0x10+(((16<<4)&0xf0)|((this.ack>>8)&0xf)), this.ack&0xff, 0x00, msg])
-			latestBuf = Buffer.concat([latestBuf, Buffer.from(ExtraMsg), this.TKEN]) // move header (latestBuf), optional extraMsg & TKEN into 1 buffer
+			var packet = Buffer.from([
+				0x10+(((16<<4)&0xf0)|((this.ack>>8)&0xf)), // control flag + ack
+				this.ack&0xff, // ack
+				0x00, // idk but always 0
+				msg // actual msg id
+			]) 
+			packet = Buffer.concat([packet, Buffer.from(ExtraMsg), this.TKEN]) // move header (latestBuf), optional extraMsg & TKEN into 1 buffer
 			if (this.proxyMode) {
 				var packet = SocksClient.createUDPFrame({
 					remoteHost: { host: this.host, port: this.port },
-					data: latestBuf
+					data: packet
 				});
-				if (this.hostInfo != undefined)
-					this.socket.send(packet, 0, packet.length, this.hostInfo.port, this.hostInfo.host, (err, bytes) => {
+				if (this.proxyHostInfo != undefined)
+					this.socket.send(packet, 0, packet.length, this.proxyHostInfo.port, this.proxyHostInfo.host, (err, bytes) => {
 						// console.log(`sent controlmsg ${msg} with ack: `, ack, bytes)	
 						resolve(bytes)
 					})
+
 			} else {
-				this.socket.send(latestBuf, 0, latestBuf.length, this.port, this.host, (err, bytes) => {
+				this.socket.send(packet, 0, packet.length, this.port, this.host, (err, bytes) => {
 					// console.log(`sent controlmsg ${msg} with ack: `, ack, bytes)	
 					resolve(bytes)
 				})
@@ -262,8 +294,8 @@ class Client extends EventEmitter {
 				remoteHost: { host: this.host, port: this.port },
 				data: latestBuf
 			});
-			if (this.hostInfo != undefined)
-				this.socket.send(packet, 0, packet.length, this.hostInfo.port, this.hostInfo.host, (err, bytes) => {
+			if (this.proxyHostInfo != undefined)
+				this.socket.send(packet, 0, packet.length, this.proxyHostInfo.port, this.proxyHostInfo.host, (err, bytes) => {
 					// console.log(`sent controlmsg ${msg} with ack: `, ack, bytes)	
 					// resolve(bytes)
 				})
@@ -278,7 +310,7 @@ class Client extends EventEmitter {
 		if (this.proxyMode && this.socksClient) {
 			this.socksClient.on("established", (info) => {
 				console.log(info.remoteHost);
-				this.hostInfo = info.remoteHost;
+				this.proxyHostInfo = info.remoteHost;
 				this.SendControlMsg(1, "TKEN")
 				this.time = new Date().getTime() + 2000;
 				
@@ -320,6 +352,7 @@ class Client extends EventEmitter {
 			})
 		}
 		if (a.toString().includes("TKEN") || arrStartsWith(a.toJSON().data, [0x10, 0x0, 0x0, 0x0])) {
+			console.log(this.ack, this.clientAck, "ackclientack")
 			this.TKEN = Buffer.from(a.toJSON().data.slice(a.toJSON().data.length-4, a.toJSON().data.length))
 			this.SendControlMsg(3);
 			this.State = 2; // loading state
@@ -354,18 +387,61 @@ class Client extends EventEmitter {
 				this.emit('connected', this.index);
 			}
 			this.State = 3
-		} else if (unpacked.chunks[0] && chunkMessages.includes("PING")) {
+		} 
+		if (unpacked.chunks[0] && chunkMessages.includes("PING")) {
 			var packer = new MsgPacker(23, true);
-			console.log("actually sending ping reply o.o")
 			this.SendMsgEx(packer, 1)
-		} else if (chunkMessages.includes("SNAP") || chunkMessages.includes("SNAP_EMPTY") || chunkMessages.includes("SNAP_SINGLE")) {
+		} 
+		if (chunkMessages.includes("INPUT_TIMING")) {
+			var chunk = unpacked.chunks.filter(a => a.msg == "INPUT_TIMING")[0]
+			int = (MsgUnpacker.prototype.unpackInt(chunk.raw.toJSON().data))
+			this.PredTick = int.result
+			int = (MsgUnpacker.prototype.unpackInt(int.remaining))
+			this.TimeLeft = int.result
+			console.log(this.PredTick, this.TimeLeft)
+		}
+		if (chunkMessages.includes("SNAP") || chunkMessages.includes("SNAP_EMPTY") || chunkMessages.includes("SNAP_SINGLE")) {
 			// just skip snap, nobody likes snap
 			this.receivedSnaps++; /* wait for 2 ss before seeing self as connected */
 			if (this.receivedSnaps >= 2) {
-				if (this.State != 3)
+				if (this.State != 3 && this.index)
 					this.emit('connected', this.index)
 				this.State = 3
 			}
+			var chunk = unpacked.chunks.filter(a => a.msg == "SNAP" || a.msg == "SNAP_EMPTY" || a.msg == "SNAP_SINGLE")[0]
+			var int = (MsgUnpacker.prototype.unpackInt(chunk.raw.toJSON().data))
+			this.AckGameTick = int.result
+			if (this.inputsSent == 0 && this.receivedSnaps > 3) {
+				this.inputsSent++
+				console.log("yes send1", this.PredTick, this.TimeLeft, this.AckGameTick)
+				var Msg = new MsgPacker(16, true)
+				Msg.AddInt(this.AckGameTick);
+				Msg.AddInt(this.AckGameTick+1);
+				Msg.AddInt(40);
+				
+				for (let x of Object.values(this.inputObject))
+					Msg.Addint(x)
+				
+				this.SendMsgEx(Msg, 1)
+				console.log(Msg)
+			} else if ((this.PredTick + this.TimeLeft) < (this.AckGameTick + 10) && this.AckGameTick != -1 && (this.lastInputsTime + 10) < this.AckGameTick) {
+				// console.log("yes send", this.PredTick, this.TimeLeft, this.AckGameTick)
+				var Msg = new MsgPacker(16, true)
+				Msg.AddInt(this.AckGameTick);
+				if (this.PredTick != -1)
+					Msg.AddInt(this.PredTick);
+				else
+					Msg.AddInt(this.AckGameTick + 1);
+				Msg.AddInt(40);
+
+				for (let x of Object.values(this.inputObject))
+					Msg.AddInt(x)
+				this.SendMsgEx(Msg, 1)
+				this.PredTick = -1
+				this.TimeLeft = -1
+				this.inputsSent++;
+				this.lastInputsTime = this.AckGameTick;
+			} 
 		} else if (unpacked.twprotocol.flags == 128 || unpacked.twprotocol.flags == 0x10) { // also skip compressed & control messages
 			// flag 128 = compression flag
 		} 
