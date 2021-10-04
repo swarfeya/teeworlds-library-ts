@@ -1,3 +1,4 @@
+
 var Tick: number;
 enum Team {
     Spectators = -1,

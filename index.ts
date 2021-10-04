@@ -19,7 +19,7 @@ var killLoop: any;
 process.stdin.on("data", data => {
 	data = data.slice(0, -2)
 	if (data.toString().startsWith(";")) { // ; = command prefix
-		var command: string[] = data.slice(1).toString().split(" ");
+		var command = data.slice(1).toString().split(" ");
 		console.log(command)
 		if (command[0] == "vote" && parseInt(command[1]) != NaN) {
 			console.log(parseInt(command[1]))
@@ -83,14 +83,6 @@ process.stdin.on("data", data => {
 						}, 50*i, client)
 					}, 60*clients.length)
 				})
-		} else if (command[0] == "eval") {
-			var args = command.slice(1).join(" ")
-			eval(args);
-		} else if (command[0] == "input" && command[1] && command[2]) {
-			clients.forEach(client => {
-				if (client.inputObject[command[1]] && typeof command[2] == "number")
-					client.inputObject[command[1]] = command[2]
-			})
 		} else if (command[0] == "team" && parseInt(command[1]) != NaN) {
 		var packer = new MsgPacker(18, false)
 			packer.AddInt(parseInt(command[1]))
