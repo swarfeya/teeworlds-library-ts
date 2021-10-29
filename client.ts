@@ -1,23 +1,19 @@
 var MsgPacker = require('./MsgPacker');
-// var MsgUnpacker = require('./MsgUnpacker');
-// var net = require('dgram');
 import net from 'dgram';
-// const SocksClient = require('socks').SocksClient;
 import { SocksClient, SocksClientOptions, SocksProxy, SocksRemoteHost } from 'socks';
 import fs from 'fs';
-// import * from fs as 'fs';
 import { EventEmitter } from 'stream';
 import { spawn } from 'child_process';
 
 interface chunk {
-	bytes?: number,
-	flags?: number, 
+	bytes: number,
+	flags: number, 
 	sequence?: number,
 	seq?: number,
-	type?: 'sys' | 'game',
-	msgid?: number,
-	msg?: string,
-	raw?: Buffer,
+	type: 'sys' | 'game',
+	msgid: number,
+	msg: string,
+	raw: Buffer,
 	extended_msgid?: Buffer;
 }
 function toHexStream(buff: Buffer): string {
@@ -27,7 +23,6 @@ async function decompress(buff: Buffer): Promise<Buffer> {
 	return new Promise((resolve) => {
 		// get hex stream
 		var hexStream = toHexStream(buff)
-		// console.log(`"${hexStream}"`)
 		var ls = spawn('python', [__dirname + '\\huffman.py', hexStream, "-decompress"])
 		ls.stdout.on('data', (data) => {
 			resolve(Buffer.from(eval(data.toString()))); // convert stdout array to actual array, then convert the array to Buffer & return it
@@ -39,13 +34,7 @@ async function decompress(buff: Buffer): Promise<Buffer> {
 
 			resolve(Buffer.from([]));
 		}, 750)
-		ls.stderr.on('data', (data) => {
-			console.error(`stderr: ${data}`);
-		});
 		
-		ls.on('close', (code) => {
-			console.log(`child process exited with code ${code}`);
-		});
 	})
 }
 interface _packet {
@@ -95,14 +84,13 @@ class Client extends EventEmitter {
 	time: number;
 	socksClient?: SocksClient;
 	hostInfo?: SocksRemoteHost; 
-	// latestBuf: Buffer;
-	// hostInfo: object;
+
 	constructor(ip: string, port: number, name: string, id: number, proxy?: SocksProxy) {
 		super();
 		this.host = ip;
 		this.port = port;
 		this.name = name;
-		// this.onetime = []
+
 		this.index = id;
 		this.State = 0; // 0 = offline; 1 = STATE_CONNECTING = 1, STATE_LOADING = 2, STATE_ONLINE = 3
 		this.ack = 0; // ack of messages the client has received
@@ -162,40 +150,37 @@ class Client extends EventEmitter {
 		packet = packet.slice(3)
 		if (unpacked.twprotocol.flags & 128) {
 			packet = await decompress(packet)	
-			console.log(toHexStream(packet));
-			// console.log(packet)
 			if (packet.length == 1 && packet[0] == -1)
 				return unpacked
 		}
 		// return unpacked;
 		for (let i = 0; i < unpacked.twprotocol.chunkAmount; i++) {
-			var _chunk: chunk = {};
+			var chunk: chunk = {} as chunk;
 			// chunk.preraw = packet;
-			_chunk.bytes = ((packet[0] & 0x3f) << 4) | (packet[1] & ((1 << 4) - 1)); // idk what this shit is but it works
+			chunk.bytes = ((packet[0] & 0x3f) << 4) | (packet[1] & ((1 << 4) - 1)); // idk what this shit is but it works
 			// if (i == unpacked.twprotocol.chunkAmount-1) 
 				// console.log("last", packet.slice(0, chunk.bytes))
-			_chunk.flags = (packet[0] >> 6) & 3;
-			_chunk.sequence = -1;
+			chunk.flags = (packet[0] >> 6) & 3;
+			chunk.sequence = -1;
 			
-			if (_chunk.flags & 1) {
-				_chunk.sequence = ((packet[1] & (~((1 << 4) - 1))) << 2) | packet[2];
-				_chunk.seq = ((packet[1]&0xf0)<<2) | packet[2];
+			if (chunk.flags & 1) {
+				chunk.seq = ((packet[1]&0xf0)<<2) | packet[2];
 				packet = packet.slice(3) // remove flags & size
 			} else
 				packet = packet.slice(2)
 			// if (Object.keys(messageUUIDs).includes())
 			// console.log(packet[0].toString(16), packet[1].toString(16))
-			_chunk.type = packet[0] & 1 ? "sys" : "game"; // & 1 = binary, ****_***1. e.g 0001_0111 sys, 0001_0110 game
-			_chunk.msgid = (packet[0]-(packet[0]&1))/2;
-			_chunk.msg = messageTypes[packet[0]&1][_chunk.msgid];
+			chunk.type = packet[0] & 1 ? "sys" : "game"; // & 1 = binary, ****_***1. e.g 0001_0111 sys, 0001_0110 game
+			chunk.msgid = (packet[0]-(packet[0]&1))/2;
+			chunk.msg = messageTypes[packet[0]&1][chunk.msgid];
 			// chunk.ye = packet[0].toString(16)
 			// console.log(sys(packet[1]))
-			_chunk.raw = packet.slice(1, _chunk.bytes)
+			chunk.raw = packet.slice(1, chunk.bytes)
 			Object.values(messageUUIDs).forEach((a, i) => {
 				if (a.compare(packet.slice(0, 16)) == 0) {
-					_chunk.extended_msgid = a;
+					chunk.extended_msgid = a;
 					// chunk.type = 'sys';
-					_chunk.msg = Object.keys(messageUUIDs)[i];
+					chunk.msg = Object.keys(messageUUIDs)[i];
 				}
 			})
 			
@@ -203,8 +188,8 @@ class Client extends EventEmitter {
 			// chunk.len = chunk.raw.length
 			// chunk.raw = chunk.raw.map(a => parseInt(a, 16))
 			// chunk.raw = Buffer.from(chunk.raw)
-			packet = packet.slice(_chunk.bytes) // +1 cuz it adds an extra \x00 for easier parsing i guess
-			unpacked.chunks.push(_chunk)
+			packet = packet.slice(chunk.bytes) // +1 cuz it adds an extra \x00 for easier parsing i guess
+			unpacked.chunks.push(chunk)
 		}
 		return unpacked
 		}
