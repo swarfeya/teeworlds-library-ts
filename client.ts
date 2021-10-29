@@ -78,14 +78,13 @@ class Client extends EventEmitter {
 	lastMsg: string;
 	_port: number;
 	proxy?: SocksProxy;
-	proxyMode: boolean;
 	socket: net.Socket;
 	TKEN: Buffer;
 	time: number;
 	socksClient?: SocksClient;
 	hostInfo?: SocksRemoteHost; 
 
-	constructor(ip: string, port: number, name: string, id: number, proxy?: SocksProxy) {
+	constructor(ip: string, port: number, name: string, id: number) {
 		super();
 		this.host = ip;
 		this.port = port;
@@ -99,51 +98,17 @@ class Client extends EventEmitter {
 		this.lastMsg = "";
 		this.hostInfo; // hostinfo of the proxy
 		this._port = Math.floor(Math.random()*65535)
-		this.proxyMode = Boolean(proxy)
 		this.socket = net.createSocket("udp4")
 		this.socket.bind();
-		if (this.proxyMode && proxy) {
-			this.proxy = proxy;
-			const options: SocksClientOptions = {
-				proxy: proxy,
-			
-				command: 'associate',
-			
-				// When using associate, the destination should be the remote client that is expected to send UDP packets to the proxy server to be forwarded. This should be your local ip, or optionally the wildcard address (0.0.0.0)  UDP Client <-> Proxy <-> UDP Client
-				destination: {
-					host: '***REMOVED***',
-					port: this._port
-				}
-			};
-			this.socksClient = new SocksClient(options);
-			this.socksClient.connect();
-			this.socksClient.on("error", err => {
-				console.log("CRASH CRASH CRASH!!!", err)
-				// this.emit("error", err, this.index);
-				// remove proxy
-				var proxies = fs.readFileSync(__dirname + "\\socks5.txt")
-					.toString()
-					.replace(/\r/g, "")
-					.split("\n")
-					.filter(a => a) // filter empty out	
-				if (proxies.indexOf(`${proxy.host}:${proxy.port}`) != -1)
-					proxies.splice(proxies.indexOf(`${proxy.host}:${proxy.port}`), 1)
-				else
-					console.log("wtf proxy not in proxies?", proxy)
-				fs.writeFileSync(__dirname + "\\socks5.txt", proxies.join("\n"));
-			})
-			
-		}
+
 		this.hostInfo;
 		this.TKEN = Buffer.from([255, 255, 255, 255])
 		this.time = new Date().getTime()+2000; // time (used for keepalives, start to send keepalives after 2 seconds)
 		this.State = 0;
 	}
 	async Unpack(packet: Buffer): Promise<_packet> {
-		// var sys = (i) => { return {"type": i&1 ? "sys" : "game", "msgid": (i-(i&1))/2, "msg": messageTypes[i&1][(i-(i&1))/2], "ye": i.toString(16)}}
 		var unpacked: _packet = {twprotocol: {flags: packet[0], ack: packet[1], chunkAmount: packet[2], size: packet.byteLength-3}, chunks: []}
 		
-		// console.log(unpacked)
 		
 		if (packet.indexOf(Buffer.from([0xff,0xff,0xff,0xff])) == 0 && !(unpacked.twprotocol.flags & 8) || unpacked.twprotocol.flags == 255) // flags == 255 is connectionless (used for sending usernames)
 			return unpacked;
@@ -156,10 +121,7 @@ class Client extends EventEmitter {
 		// return unpacked;
 		for (let i = 0; i < unpacked.twprotocol.chunkAmount; i++) {
 			var chunk: chunk = {} as chunk;
-			// chunk.preraw = packet;
 			chunk.bytes = ((packet[0] & 0x3f) << 4) | (packet[1] & ((1 << 4) - 1)); // idk what this shit is but it works
-			// if (i == unpacked.twprotocol.chunkAmount-1) 
-				// console.log("last", packet.slice(0, chunk.bytes))
 			chunk.flags = (packet[0] >> 6) & 3;
 			chunk.sequence = -1;
 			
@@ -168,13 +130,9 @@ class Client extends EventEmitter {
 				packet = packet.slice(3) // remove flags & size
 			} else
 				packet = packet.slice(2)
-			// if (Object.keys(messageUUIDs).includes())
-			// console.log(packet[0].toString(16), packet[1].toString(16))
 			chunk.type = packet[0] & 1 ? "sys" : "game"; // & 1 = binary, ****_***1. e.g 0001_0111 sys, 0001_0110 game
 			chunk.msgid = (packet[0]-(packet[0]&1))/2;
 			chunk.msg = messageTypes[packet[0]&1][chunk.msgid];
-			// chunk.ye = packet[0].toString(16)
-			// console.log(sys(packet[1]))
 			chunk.raw = packet.slice(1, chunk.bytes)
 			Object.values(messageUUIDs).forEach((a, i) => {
 				if (a.compare(packet.slice(0, 16)) == 0) {
@@ -184,10 +142,6 @@ class Client extends EventEmitter {
 				}
 			})
 			
-			// chunk.raw = chunk.raw.toJSON().data.map(a => a.toString(16))
-			// chunk.len = chunk.raw.length
-			// chunk.raw = chunk.raw.map(a => parseInt(a, 16))
-			// chunk.raw = Buffer.from(chunk.raw)
 			packet = packet.slice(chunk.bytes) // +1 cuz it adds an extra \x00 for easier parsing i guess
 			unpacked.chunks.push(chunk)
 		}
@@ -198,22 +152,9 @@ class Client extends EventEmitter {
 			
 			var latestBuf = Buffer.from([0x10+(((16<<4)&0xf0)|((this.ack>>8)&0xf)), this.ack&0xff, 0x00, msg])
 			latestBuf = Buffer.concat([latestBuf, Buffer.from(ExtraMsg), this.TKEN]) // move header (latestBuf), optional extraMsg & TKEN into 1 buffer
-			if (this.proxyMode) {
-				var packet = SocksClient.createUDPFrame({
-					remoteHost: { host: this.host, port: this.port },
-					data: latestBuf
-				});
-				if (this.hostInfo != undefined)
-					this.socket.send(packet, 0, packet.length, this.hostInfo.port, this.hostInfo.host, (err, bytes) => {
-						// console.log(`sent controlmsg ${msg} with ack: `, ack, bytes)	
-						resolve(bytes)
-					})
-			} else {
 				this.socket.send(latestBuf, 0, latestBuf.length, this.port, this.host, (err, bytes) => {
-					// console.log(`sent controlmsg ${msg} with ack: `, ack, bytes)	
 					resolve(bytes)
 				})
-			}
 			setTimeout(() => { resolve("failed, rip") }, 2000) 
 			/* 	after 2 seconds it was probably not able to send, 
 				so when sending a quit message the user doesnt
@@ -222,72 +163,30 @@ class Client extends EventEmitter {
 	})
 	}
 	SendMsgEx(Msg: typeof MsgPacker, Flags: number) {
-		// if (!Msg instanceof MsgPacker) 
-			// return;
 		var header = [] 
-		// mpd = (*mpd << 1) | sys; /* store system flag in msg id */
-		// if(Flags&1)
-			// ack = (ack+1)%(1<<10); /* max sequence */
-		// pcd = Msg.buffer;
 		header[0] = ((Flags&3)<<6)|((Msg.size>>4)&0x3f); 
 		header[1] = (Msg.size&0xf);
 		if(Flags&1) {
 			header[1] |= (this.clientAck>>2)&0xf0;
 			header[2] = this.clientAck&0xff;
 		} 	
-		// if (Msg.sys)
-		// var latestBuf = Buffer.from([0x0, ack, 0x01, pcd[0], pcd[1], pcd[2]])
-		// else
-			// var latestBuf = Buffer.from([0x0, ack, 0x01, pcd[0], pcd[1], clientAck])
-		// latestBuf = Buffer.concat([latestBuf, Msg.buffer, bufffff])
 		var latestBuf = Buffer.from([0x0+(((16<<4)&0xf0)|((this.ack>>8)&0xf)), this.ack&0xff, 0x1, header[0], header[1], this.clientAck]);
 		var latestBuf = Buffer.concat([latestBuf, Msg.buffer, this.TKEN]);
-		if (this.proxyMode) {
-			var packet = SocksClient.createUDPFrame({
-				remoteHost: { host: this.host, port: this.port },
-				data: latestBuf
-			});
-			if (this.hostInfo != undefined)
-				this.socket.send(packet, 0, packet.length, this.hostInfo.port, this.hostInfo.host, (err, bytes) => {
-					// console.log(`sent controlmsg ${msg} with ack: `, ack, bytes)	
-					// resolve(bytes)
-				})
-		} else {
 			this.socket.send(latestBuf, 0, latestBuf.length, this.port, this.host, (err, bytes) => {
-				// console.log(`sent controlmsg ${msg} with ack: `, ack, bytes)	
-				// resolve(bytes)
 			})
-		}
 	}
 	connect() {
-		if (this.proxyMode && this.socksClient) {
-			this.socksClient.on("established", (info) => {
-				console.log(info.remoteHost);
-				this.hostInfo = info.remoteHost;
-				this.SendControlMsg(1, "TKEN")
-				this.time = new Date().getTime() + 2000;
-				
-			})
-	} else {
 		this.SendControlMsg(1, "TKEN")
-		this.time = new Date().getTime() + 2000;
-	}
+		this.time = new Date().getTime() + 2000; // start sending keepalives after 2s
 	this.socket.on("message", async (a) => {
-		if (this.proxyMode)
-			a = SocksClient.parseUDPFrame(a).data;
-
 		var unpacked: _packet = await this.Unpack(a)
-		// console.log(unpacked)
 		if (unpacked.twprotocol.flags != 128 && unpacked.twprotocol.ack) {
 			this.clientAck = unpacked.twprotocol.ack+1;
 			unpacked.chunks.forEach(a => {
-				// if (!a.msg)
-					// console.log(unpacked)
 				if (a.msg && !a.msg.startsWith("SNAP")) {
 					if (a.seq != undefined && a.seq != -1)
 						this.ack = a.seq
 					
-					// console.log(a.msg + " is not snap, new ack: " + this.ack, a.sequence + ", new clientAck: " + this.clientAck);
 				}
 			})
 		}
@@ -330,18 +229,15 @@ class Client extends EventEmitter {
 			packer.AddInt(65535); /* color feet */
 			this.SendMsgEx(packer, 1);
 
-			// onetime.push("startinfo")
 			
 		} else if (unpacked.chunks[0] && chunkMessages.includes("SV_READY_TO_ENTER")) {
 			
 			if (this.State != 3) {
-				// console.log("crash cause 19123?")
 				this.emit('connected', this.index);
 			}
 			this.State = 3
 		} else if (unpacked.chunks[0] && chunkMessages.includes("PING")) {
 			var packer = new MsgPacker(23, true);
-			console.log("actually sending ping reply o.o")
 			this.SendMsgEx(packer, 1)
 		} else if (chunkMessages.includes("SNAP") || chunkMessages.includes("SNAP_EMPTY") || chunkMessages.includes("SNAP_SINGLE")) {
 			// just skip snap, nobody likes snap
@@ -354,44 +250,10 @@ class Client extends EventEmitter {
 		} else if (unpacked.twprotocol.flags == 128 || unpacked.twprotocol.flags == 0x10) { // also skip compressed & control messages
 			// flag 128 = compression flag
 		} 
-		else {
-			// if (unpacked.msgid != NaN)
-			// console.log("invalid packet: ", unpacked, this.ack)
-			// socket.disconnect()
-		}
 		if (new Date().getTime() - this.time >= 1000) {
 			this.time = new Date().getTime();
 			this.SendControlMsg(0);
 		}
-	/*	setTimeout(() => {
-			if (State != 3) {
-				if (message) {
-					State = 0;
-					message = false;
-					latestBuf = Buffer.from([0x00, ack, 0x01, 0x41, 0x04, clientAck, 0x22, 0x00])
-					latestBuf = Buffer.concat([latestBuf, Buffer.from("chat test blabla"), Buffer.from([0x0a, 0x00]), bufffff])
-					socket.send(latestBuf, 0, latestBuf.length, port, host, (err, bytes) => {
-						console.log("SUCCESFFUYLLY SENT CHAT: " + bytes)
-						// process.exit()
-					})
-					setTimeout(() => {
-						console.log("yooyooy")
-						latestBuf = Buffer.from([0x10, ack, 0x0, 0x04])
-						latestBuf = Buffer.concat([latestBuf, bufffff]);
-						// console.log(ack, "THIS IS READY SENMD STARTINFO! SEND STUFF OR SMTH?!")
-						socket.send(latestBuf, 0, latestBuf.length, port, host, (err, bytes) => {
-							console.log("SUCCESFFUYLLY SENT DISCONNECT: " + bytes)
-							process.exit()
-						})
-					}, 1500)
-				}
-
-			}
-		}, 7500)*/
-		
-		// if (ack >= 100)
-		// return socket.disconnect()
-		// console.log(bufffff.toJSON().data)
 	})
 	}
 
