@@ -1,6 +1,5 @@
 var MsgPacker = require('./MsgPacker');
 import net from 'dgram';
-import { SocksClient, SocksClientOptions, SocksProxy, SocksRemoteHost } from 'socks';
 import fs from 'fs';
 import { EventEmitter } from 'stream';
 import { spawn } from 'child_process';
@@ -77,12 +76,9 @@ class Client extends EventEmitter {
 	receivedSnaps: number; /* wait for 2 ss before seeing self as connected */
 	lastMsg: string;
 	_port: number;
-	proxy?: SocksProxy;
 	socket: net.Socket;
 	TKEN: Buffer;
 	time: number;
-	socksClient?: SocksClient;
-	hostInfo?: SocksRemoteHost; 
 
 	constructor(ip: string, port: number, name: string, id: number) {
 		super();
@@ -93,15 +89,13 @@ class Client extends EventEmitter {
 		this.index = id;
 		this.State = 0; // 0 = offline; 1 = STATE_CONNECTING = 1, STATE_LOADING = 2, STATE_ONLINE = 3
 		this.ack = 0; // ack of messages the client has received
-		this.clientAck = 1; // ack of messages the client has sent
+		this.clientAck = 0; // ack of messages the client has sent
 		this.receivedSnaps = 0; /* wait for 2 snaps before seeing self as connected */
 		this.lastMsg = "";
-		this.hostInfo; // hostinfo of the proxy
 		this._port = Math.floor(Math.random()*65535)
 		this.socket = net.createSocket("udp4")
 		this.socket.bind();
 
-		this.hostInfo;
 		this.TKEN = Buffer.from([255, 255, 255, 255])
 		this.time = new Date().getTime()+2000; // time (used for keepalives, start to send keepalives after 2 seconds)
 		this.State = 0;
@@ -167,6 +161,7 @@ class Client extends EventEmitter {
 		header[0] = ((Flags&3)<<6)|((Msg.size>>4)&0x3f); 
 		header[1] = (Msg.size&0xf);
 		if(Flags&1) {
+			this.clientAck = (this.clientAck+1)%(1<<10); 
 			header[1] |= (this.clientAck>>2)&0xf0;
 			header[2] = this.clientAck&0xff;
 		} 	
@@ -181,7 +176,6 @@ class Client extends EventEmitter {
 	this.socket.on("message", async (a) => {
 		var unpacked: _packet = await this.Unpack(a)
 		if (unpacked.twprotocol.flags != 128 && unpacked.twprotocol.ack) {
-			this.clientAck = unpacked.twprotocol.ack+1;
 			unpacked.chunks.forEach(a => {
 				if (a.msg && !a.msg.startsWith("SNAP")) {
 					if (a.seq != undefined && a.seq != -1)

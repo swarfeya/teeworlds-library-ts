@@ -11,7 +11,6 @@ var a = {host: "51.210.171.47", port: 7303}
 if (argv.length)
 	a = {host: argv[0].split(":")[0], port: parseInt(argv[0].split(":")[1])}
 var client: Client;
-var killLoop: any;
 // client.push()
 // var client = new Client(a.host, a.port, argv[1] ? argv[1] : "nameless tee");
 
@@ -56,21 +55,6 @@ process.stdin.on("data", data => {
 			var packer = new MsgPacker(22, false)
 				if (client.State == 3)
 					client.SendMsgEx(packer, 1)
-		} else if (command[0] == "dk") {
-			var packer = new MsgPacker(22, false)
-				setTimeout((client) => {
-						client.SendMsgEx(packer, 1)
-				}, 50, client)
-		} else if (command[0] == "killloop") {
-			if (killLoop)
-				clearInterval(killLoop)
-			else
-				killLoop = setInterval(() => {
-					var packer = new MsgPacker(22, false)
-						setTimeout((client) => {
-							client.SendMsgEx(packer, 1)
-						}, 50, client)
-				})
 		} else if (command[0] == "team" && parseInt(command[1]) != NaN) {
 		var packer = new MsgPacker(18, false)
 			packer.AddInt(parseInt(command[1]))
@@ -85,7 +69,7 @@ process.stdin.on("data", data => {
 	} else {
 	var packer = new MsgPacker(17, false);
 		packer.AddInt(0); // team
-		packer.AddString(data.toString() + '\n');
+		packer.AddString(data.toString());
 			if (client.State == 3)
 				client.SendMsgEx(packer, 1);
 	}	
@@ -107,9 +91,10 @@ process.on("SIGINT", () => { // on ctrl + c
 	}, 500) // send disconnect every 500ms if not disconnected
 })
 
-var proxy = false;
-var loginId = 0;
 var fs = require('fs')
-client = new Client(a.host, a.port, argv[1] ? argv[1] : "nameless tee", 0);
-client.connect();
-
+if (!argv[0])
+	throw new Error("ip:port not set")
+else {
+	client = new Client(a.host, a.port, argv[1] ? argv[1] : "nameless tee", 0);
+	client.connect();
+}
