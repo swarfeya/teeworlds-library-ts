@@ -1,5 +1,10 @@
 # tw-chatonly
 chatonly tw client, made in typescript
 
+# Installing
+ -  install nodejs & typescript
+ -  Compile the files by running `tsc`
+ -  Install required dependencies by running `npm install` 
+
 # Running
-Compile the files by running `tsc` (typescript needs to be pre-installed) & run the files after the compilation using `node . ip:port name` (node also needs to be pre installed).
+Run the files `node . ip:port name`.
