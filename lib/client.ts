@@ -3,6 +3,7 @@ import net from 'dgram';
 import fs from 'fs';
 import { EventEmitter } from 'stream';
 import { spawn } from 'child_process';
+import MsgUnpacker from './MsgUnpacker';
 
 interface chunk {
 	bytes: number,
@@ -189,11 +190,14 @@ class Client extends EventEmitter {
 			var chat = unpacked.chunks.filter(a => a.msg == "SV_CHAT");
 			chat.forEach(a => {
 				if (a.msg == "SV_CHAT") {
-					// console.log(a)
-					// var _chat = new MsgUnpacker("SV_CHAT", a.raw)
-					// chat = msgUnpack(chat.raw)
-					// console.log("emitting crash cause chat?", _chat)
-					// this.emit("message", _chat)
+					var unpacked = {team: 0, client_id: 0, message: ""};
+					unpacked.team = MsgUnpacker.unpackInt(a.raw.toJSON().data).result;
+					var remaining: number[] = MsgUnpacker.unpackInt(a.raw.toJSON().data).remaining;
+					unpacked.client_id = MsgUnpacker.unpackInt(remaining).result;
+					remaining = MsgUnpacker.unpackInt(remaining).remaining;
+					unpacked.message = MsgUnpacker.unpackString(remaining).result;
+					// console.log(unpacked)
+					this.emit("message", unpacked)
 				}
 			})
 		}
@@ -234,15 +238,12 @@ class Client extends EventEmitter {
 			var packer = new MsgPacker(23, true);
 			this.SendMsgEx(packer, 1)
 		} else if (chunkMessages.includes("SNAP") || chunkMessages.includes("SNAP_EMPTY") || chunkMessages.includes("SNAP_SINGLE")) {
-			// just skip snap, nobody likes snap
 			this.receivedSnaps++; /* wait for 2 ss before seeing self as connected */
 			if (this.receivedSnaps >= 2) {
 				if (this.State != 3)
 					this.emit('connected', this.index)
 				this.State = 3
 			}
-		} else if (unpacked.twprotocol.flags == 128 || unpacked.twprotocol.flags == 0x10) { // also skip compressed & control messages
-			// flag 128 = compression flag
 		} 
 		if (new Date().getTime() - this.time >= 1000) {
 			this.time = new Date().getTime();

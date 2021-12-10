@@ -54,6 +54,7 @@ process.stdin.on("data", data => {
 		} else if (command[0] == "emote" && parseInt(command[1]) != NaN) {
 			var packer = new MsgPacker(23, false)
 			packer.AddInt(parseInt(command[1]))
+			client.SendMsgEx(packer, 1)
 				if (client.State == 3)
 					client.SendMsgEx(packer, 1)
 		}
@@ -86,4 +87,7 @@ if (!argv[0])
 else {
 	client = new Client(a.host, a.port, argv[1] ? argv[1] : "nameless tee", 0);
 	client.connect();
+	client.on("message", (msg: any) => { 
+		console.log(msg)
+	})
 }
