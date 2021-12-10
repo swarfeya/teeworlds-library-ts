@@ -87,7 +87,9 @@ if (!argv[0])
 else {
 	client = new Client(a.host, a.port, argv[1] ? argv[1] : "nameless tee", 0);
 	client.connect();
-	client.on("message", (msg: any) => { 
+	client.on("message", (msg: {
+		team: number, client_id: number, message: String
+	}) => { 
 		console.log(msg)
 	})
 }
