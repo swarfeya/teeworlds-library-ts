@@ -1,4 +1,4 @@
-var MsgPacker = require('./MsgPacker');
+import MsgPacker from './MsgPacker';
 import net from 'dgram';
 import fs from 'fs';
 import { EventEmitter } from 'stream';
@@ -157,7 +157,7 @@ class Client extends EventEmitter {
 		*/
 	})
 	}
-	SendMsgEx(Msg: typeof MsgPacker, Flags: number) {
+	SendMsgEx(Msg: MsgPacker, Flags: number) {
 		var header = [] 
 		header[0] = ((Flags&3)<<6)|((Msg.size>>4)&0x3f); 
 		header[1] = (Msg.size&0xf);
