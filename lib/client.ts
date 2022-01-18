@@ -5,6 +5,33 @@ import { EventEmitter } from 'stream';
 import { spawn } from 'child_process';
 import MsgUnpacker from './MsgUnpacker';
 
+import { Snapshot } from './snapshot';
+
+const SnapUnpacker = new Snapshot();
+
+enum items {
+	OBJ_EX,
+	OBJ_PLAYER_INPUT,
+	OBJ_PROJECTILE,
+	OBJ_LASER,
+	OBJ_PICKUP,
+	OBJ_FLAG,
+	OBJ_GAME_INFO,
+	OBJ_GAME_DATA,
+	OBJ_CHARACTER_CORE,
+	OBJ_CHARACTER,
+	OBJ_PLAYER_INFO,
+	OBJ_CLIENT_INFO,
+	OBJ_SPECTATOR_INFO,
+	EVENT_COMMON,
+	EVENT_EXPLOSION,
+	EVENT_SPAWN,
+	EVENT_HAMMERHIT,
+	EVENT_DEATH,
+	EVENT_SOUND_GLOBAL,
+	EVENT_SOUND_WORLD,
+	EVENT_DAMAGE_INDICATOR
+}
 interface chunk {
 	bytes: number,
 	flags: number, 
@@ -80,11 +107,20 @@ class Client extends EventEmitter {
 	TKEN: Buffer;
 	time: number;
 
+	snaps: Buffer[];
+	client_infos: ClientInfo[];
+	player_infos: PlayerInfo[];
+
+
 	constructor(ip: string, port: number, nickname: string) {
 		super();
 		this.host = ip;
 		this.port = port;
 		this.name = nickname;
+
+		this.snaps = [];
+		this.client_infos = [];
+		this.player_infos = [];
 
 		this.State = 0; // 0 = offline; 1 = STATE_CONNECTING = 1, STATE_LOADING = 2, STATE_ONLINE = 3
 		this.ack = 0; // ack of messages the client has received
@@ -199,15 +235,24 @@ class Client extends EventEmitter {
 				}
 			})
 		}
-		if (a.toString().includes("TKEN") || arrStartsWith(a.toJSON().data, [0x10, 0x0, 0x0, 0x0])) {
-			this.TKEN = Buffer.from(a.toJSON().data.slice(a.toJSON().data.length-4, a.toJSON().data.length))
-			this.SendControlMsg(3);
-			this.State = 2; // loading state
-			var packer = new MsgPacker(1, true);
-			packer.AddString("0.6 626fce9a778df4d4");
-			packer.AddString(""); // password
-			this.SendMsgEx(packer, 1)
-		} else if (unpacked.chunks[0] && chunkMessages.includes("SV_READY_TO_ENTER")) {
+		if (a.toJSON().data[0] == 0x10) {
+			if (a.toString().includes("TKEN") || arrStartsWith(a.toJSON().data, [0x10, 0x0, 0x0, 0x0])) {
+			   this.TKEN = Buffer.from(a.toJSON().data.slice(a.toJSON().data.length-4, a.toJSON().data.length))
+			   this.SendControlMsg(3);
+			   this.State = 2; // loading state
+			   var packer = new MsgPacker(1, true);
+			   packer.AddString("0.6 626fce9a778df4d4");
+			   packer.AddString(""); // password
+			   this.SendMsgEx(packer, 1)
+		   } else if (a.toJSON().data[3] == 0x4) {
+			   // disconnected
+			   this.State = 0;
+			   let reason: string = (MsgUnpacker.unpackString(a.toJSON().data.slice(4)).result);
+			   this.emit("disconnect", reason);
+		   }
+
+		}
+		if (unpacked.chunks[0] && chunkMessages.includes("SV_READY_TO_ENTER")) {
 			var Msg = new MsgPacker(15, true); /* entergame */
 			this.SendMsgEx(Msg, 1);
 		} else if ((unpacked.chunks[0] && chunkMessages.includes("CAPABILITIES") || unpacked.chunks[0] && chunkMessages.includes("MAP_CHANGE"))) {
@@ -235,13 +280,61 @@ class Client extends EventEmitter {
 		} else if (unpacked.chunks[0] && chunkMessages.includes("PING")) {
 			var packer = new MsgPacker(23, true);
 			this.SendMsgEx(packer, 1)
-		} else if (chunkMessages.includes("SNAP") || chunkMessages.includes("SNAP_EMPTY") || chunkMessages.includes("SNAP_SINGLE")) {
+		} 
+		if (chunkMessages.includes("SNAP") || chunkMessages.includes("SNAP_EMPTY") || chunkMessages.includes("SNAP_SINGLE")) {
 			this.receivedSnaps++; /* wait for 2 ss before seeing self as connected */
 			if (this.receivedSnaps >= 2) {
 				if (this.State != 3)
 					this.emit('connected')
 				this.State = 3
 			}
+
+			var chunks = unpacked.chunks.filter(a => a.msg == "SNAP" || a.msg == "SNAP_SINGLE" || a.msg == "SNAP_EMPTY");
+			if (chunks.length > 0) {
+				let part = 0;
+				let num_parts = 1;
+				chunks.forEach(chunk => {
+					let AckGameTick = (MsgUnpacker.unpackInt(chunk.raw.toJSON().data).result);
+					chunk.raw = Buffer.from(MsgUnpacker.unpackInt(chunk?.raw?.toJSON().data).remaining); 
+					let DeltaTick = MsgUnpacker.unpackInt(chunk?.raw?.toJSON().data).result
+					if (chunk.msg == "SNAP") {
+						chunk.raw = Buffer.from(MsgUnpacker.unpackInt(chunk?.raw?.toJSON().data).remaining); // delta tick
+						num_parts = (MsgUnpacker.unpackInt(chunk?.raw?.toJSON().data).result)
+						chunk.raw = Buffer.from(MsgUnpacker.unpackInt(chunk?.raw?.toJSON().data).remaining); // num parts
+						part = (MsgUnpacker.unpackInt(chunk?.raw?.toJSON().data).result)
+					}
+					chunk.raw = Buffer.from(MsgUnpacker.unpackInt(chunk?.raw?.toJSON().data).remaining); // part
+					if (chunk.msg != "SNAP_EMPTY")
+						chunk.raw = Buffer.from(MsgUnpacker.unpackInt(chunk?.raw?.toJSON().data).remaining); // crc
+					chunk.raw = Buffer.from(MsgUnpacker.unpackInt(chunk?.raw?.toJSON().data).remaining); // crc
+					if (part == 0 || this.snaps.length > 30) {
+						this.snaps = [];
+					}
+					this.snaps.push(chunk.raw)
+					
+					if ((num_parts-1) == part && this.snaps.length == num_parts) {
+						let mergedSnaps = Buffer.concat(this.snaps);
+						let snapUnpacked = SnapUnpacker.unpackSnapshot(mergedSnaps.toJSON().data, 1)
+	
+						snapUnpacked.items.forEach((a, i) => {
+							if (a.type_id == items.OBJ_CLIENT_INFO) {
+								this.client_infos[a.id] = a.parsed as ClientInfo;
+								// console.log(a.parsed, i)
+								// console.log(this.client_infos[a.id])
+							} else if (a.type_id == items.OBJ_PLAYER_INFO) {
+								this.player_infos[i] = a.parsed as PlayerInfo;
+							} else if (a.type_id == items.OBJ_EX || a.type_id > 0x4000) {
+								if (a.data.length == 5 && ((a.parsed as DdnetCharacter).freeze_end > 0 || (a.parsed as DdnetCharacter).freeze_end == -1)) {
+									// var packer = new MsgPacker(22, false)
+									// this.SendMsgEx(packer, 1)
+								}
+							}
+						})	
+					}
+
+				})
+			}
+
 		} 
 		if (new Date().getTime() - this.time >= 1000) {
 			this.time = new Date().getTime();

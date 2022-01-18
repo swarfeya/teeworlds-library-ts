@@ -87,9 +87,11 @@ if (!argv[0])
 else {
 	client = new Client(a.host, a.port, argv[1] ? argv[1] : "nameless tee");
 	client.connect();
-	client.on("message", (msg: {
-		team: number, client_id: number, message: String
-	}) => { 
-		console.log(msg)
+	client.on("message", (msg: {	team: number, client_id: number, message: String	}) => { 
+		let name = msg.client_id == -1 ? '***' : client.client_infos[msg.client_id]?.name;
+		console.log(name + ': ' + msg.message)
+	})
+	client.on("disconnect", reason => {
+		console.log("You got kicked! reason:", reason)
 	})
 }
