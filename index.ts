@@ -85,7 +85,7 @@ process.on("SIGINT", () => { // on ctrl + c
 if (!argv[0])
 	throw new Error("ip:port not set")
 else {
-	client = new Client(a.host, a.port, argv[1] ? argv[1] : "nameless tee", 0);
+	client = new Client(a.host, a.port, argv[1] ? argv[1] : "nameless tee");
 	client.connect();
 	client.on("message", (msg: {
 		team: number, client_id: number, message: String

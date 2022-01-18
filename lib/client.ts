@@ -1,4 +1,4 @@
-import MsgPacker from './MsgPacker';
+var MsgPacker = require('./MsgPacker');
 import net from 'dgram';
 import fs from 'fs';
 import { EventEmitter } from 'stream';
@@ -70,7 +70,6 @@ class Client extends EventEmitter {
 	host: string;
 	port: number;
 	name: string;
-	index: number;
 	State: number; // 0 = offline; 1 = STATE_CONNECTING = 1, STATE_LOADING = 2, STATE_ONLINE = 3
 	ack: number;
 	clientAck: number;
@@ -81,13 +80,12 @@ class Client extends EventEmitter {
 	TKEN: Buffer;
 	time: number;
 
-	constructor(ip: string, port: number, name: string, id: number) {
+	constructor(ip: string, port: number, nickname: string) {
 		super();
 		this.host = ip;
 		this.port = port;
-		this.name = name;
+		this.name = nickname;
 
-		this.index = id;
 		this.State = 0; // 0 = offline; 1 = STATE_CONNECTING = 1, STATE_LOADING = 2, STATE_ONLINE = 3
 		this.ack = 0; // ack of messages the client has received
 		this.clientAck = 0; // ack of messages the client has sent
@@ -157,7 +155,7 @@ class Client extends EventEmitter {
 		*/
 	})
 	}
-	SendMsgEx(Msg: MsgPacker, Flags: number) {
+	SendMsgEx(Msg: typeof MsgPacker, Flags: number) {
 		var header = [] 
 		header[0] = ((Flags&3)<<6)|((Msg.size>>4)&0x3f); 
 		header[1] = (Msg.size&0xf);
@@ -231,7 +229,7 @@ class Client extends EventEmitter {
 		} else if (unpacked.chunks[0] && chunkMessages.includes("SV_READY_TO_ENTER")) {
 			
 			if (this.State != 3) {
-				this.emit('connected', this.index);
+				this.emit('connected');
 			}
 			this.State = 3
 		} else if (unpacked.chunks[0] && chunkMessages.includes("PING")) {
@@ -241,7 +239,7 @@ class Client extends EventEmitter {
 			this.receivedSnaps++; /* wait for 2 ss before seeing self as connected */
 			if (this.receivedSnaps >= 2) {
 				if (this.State != 3)
-					this.emit('connected', this.index)
+					this.emit('connected')
 				this.State = 3
 			}
 		} 
