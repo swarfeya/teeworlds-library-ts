@@ -1,0 +1,24 @@
+{
+	"name": "teeworlds",
+	"version": "2.0.1",
+	"description": "Library for (ingame) teeworlds bots.",
+	"license": "MIT",
+	"main": "index.js",
+	"scripts": {
+		"test": "echo \"Error: no test specified\" && exit 1",
+		"build": "tsc",
+		"prepare": "npm run build"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+github.com/swarfey/tw-chatonly.git"
+	},
+	"keywords": [
+		"teeworlds",
+		"ddracenetwork",
+		"headless"
+	],
+	"devDependencies": {
+		"typescript": "^3.9.5"
+	}
+}
