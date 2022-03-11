@@ -1,6 +1,9 @@
 # tw-chatonly
 Library to connect a bot to a Teeworlds server.
 
+https://www.npmjs.com/package/teeworlds
+
+
 # Usage
 Example file:
 ```const test = require('teeworlds');
