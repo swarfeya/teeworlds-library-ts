@@ -1,10 +1,13 @@
 # tw-chatonly
 Library to connect a bot to a Teeworlds server.
 
+https://www.npmjs.com/package/teeworlds
+
+
 # Usage
 Example file:
-```const test = require('teeworlds');
-let client = new test.Client("127.0.0.1", 8303, "test");
+```const teeworlds = require('teeworlds');
+let client = new teeworlds.Client("127.0.0.1", 8303, "teest");
 
 client.connect();
 
