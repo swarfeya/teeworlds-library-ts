@@ -336,11 +336,15 @@ class Snapshot {
 
 			var data: number[] = []
 			for (let i = 0; i < _size; i++) {
-				snap = MsgUnpacker.unpackInt(snap).remaining;
-				data.push(MsgUnpacker.unpackInt(snap).result);
 				if (snap.length == 0) {
 					items.lost++;
 				}
+				if (snap[0]) {
+					snap = MsgUnpacker.unpackInt(snap).remaining;
+					data.push(MsgUnpacker.unpackInt(snap).result);
+				} else
+					break;
+
 			}
 			if (type_id > 0x4000 || type_id == 0) {
 				if (_size == 5 && id == 0)  {
