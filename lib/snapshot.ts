@@ -339,7 +339,7 @@ class Snapshot {
 				if (snap.length == 0) {
 					items.lost++;
 				}
-				if (snap[0]) {
+				if (snap.length > 0) {
 					snap = MsgUnpacker.unpackInt(snap).remaining;
 					data.push(MsgUnpacker.unpackInt(snap).result);
 				} else
