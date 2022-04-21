@@ -1,7 +1,7 @@
 import { randomBytes } from "crypto";
 
 import net from 'dgram';
-import fs from 'fs';
+import fs, { stat } from 'fs';
 import { EventEmitter } from 'stream';
 import { spawn } from 'child_process';
 
@@ -15,6 +15,16 @@ import Huffman from "./huffman";
 
 const huff = new Huffman();
 const SnapUnpacker = new Snapshot();
+
+enum States {
+	STATE_OFFLINE = 0,
+	STATE_CONNECTING,
+	STATE_LOADING,
+	STATE_ONLINE,
+	STATE_DEMOPLAYBACK,
+	STATE_QUITTING,
+	STATE_RESTARTING
+}
 
 interface NetObj_PlayerInput {
 	m_Direction: number,
@@ -216,7 +226,7 @@ class Client extends EventEmitter {
 		this.client_infos = [];
 		this.player_infos = [];
 
-		this.State = 0; // 0 = offline; 1 = STATE_CONNECTING = 1, STATE_LOADING = 2, STATE_ONLINE = 3
+		this.State = States.STATE_OFFLINE; // 0 = offline; 1 = STATE_CONNECTING = 1, STATE_LOADING = 2, STATE_ONLINE = 3
 		this.ack = 0; // ack of messages the client has received
 		this.clientAck = 0; // ack of messages the client has sent
 		this.receivedSnaps = 0; /* wait for 2 snaps before seeing self as connected */
@@ -227,7 +237,6 @@ class Client extends EventEmitter {
 
 		this.TKEN = Buffer.from([255, 255, 255, 255])
 		this.time = new Date().getTime() + 2000; // time (used for keepalives, start to send keepalives after 2 seconds)
-		this.State = 0;
 	}
 	Unpack(packet: Buffer): _packet {
 		var unpacked: _packet = { twprotocol: { flags: packet[0], ack: packet[1], chunkAmount: packet[2], size: packet.byteLength - 3 }, chunks: [] }
@@ -288,7 +297,7 @@ class Client extends EventEmitter {
 		})
 	}
 	SendMsgEx(Msg: MsgPacker, Flags: number) {
-		if (this.State == -1)
+		if (this.State == States.STATE_OFFLINE)
 			throw new Error("Client is not connected");
 		if (!this.socket)
 			return;
@@ -309,7 +318,7 @@ class Client extends EventEmitter {
 
 	}
 	SendMsgExWithChunks(Msgs: MsgPacker[], Flags: number) {
-		if (this.State == -1)
+		if (this.State == States.STATE_OFFLINE)
 			throw new Error("Client is not connected");
 		if (!this.socket)
 			return;
@@ -335,8 +344,11 @@ class Client extends EventEmitter {
 		this.socket.send(packet, 0, packet.length, this.port, this.host)
 	}
 	connect() {
+		
+		this.State = States.STATE_CONNECTING;
+
 		let predTimer = setInterval(() => {
-			if (this.State == 3 && this.AckGameTick > 0) {
+			if (this.State == States.STATE_ONLINE && this.AckGameTick > 0) {
 				this.PredGameTick++;
 				// console.log(this.PredGameTick, this.AckGameTick)
 			}
@@ -344,7 +356,7 @@ class Client extends EventEmitter {
 
 		this.SendControlMsg(1, "TKEN")
 		let connectInterval = setInterval(() => {
-			if (this.State == 0)
+			if (this.State == States.STATE_CONNECTING)
 				this.SendControlMsg(1, "TKEN")
 			else
 				clearInterval(connectInterval)
@@ -352,7 +364,7 @@ class Client extends EventEmitter {
 
 		setInterval(() => {
 			// if (new Date().getTime() - this.time >= 1000) {
-			if (this.State != 3)
+			if (this.State != States.STATE_ONLINE)
 				return;
 			this.time = new Date().getTime();
 			// this.SendControlMsg(0);
@@ -371,27 +383,27 @@ class Client extends EventEmitter {
 						clearInterval(connectInterval);
 						this.TKEN = Buffer.from(a.toJSON().data.slice(a.toJSON().data.length - 4, a.toJSON().data.length))
 						this.SendControlMsg(3);
-						this.State = 2; // loading state
+						this.State = States.STATE_LOADING; // loading state
 						var info = new MsgPacker(1, true);
 						info.AddString("0.6 626fce9a778df4d4");
 						info.AddString(""); // password
 
 						var client_version = new MsgPacker(0, true);
 						client_version.AddBuffer(Buffer.from("8c00130484613e478787f672b3835bd4", 'hex'));
-						let randomUuid = new Uint8Array(16);
+						let randomUuid = Buffer.alloc(16);
 
 						randomBytes(16).copy(randomUuid);
 
-						client_version.AddBuffer(Buffer.from(randomUuid));
-						client_version.AddInt(15091);
-						client_version.AddString("DDNet 15.9.1");
-
+						client_version.AddBuffer(randomUuid);
+						client_version.AddInt(16003);
+						client_version.AddString("DDNet 16.0.3");
+		
 						this.SendMsgExWithChunks([client_version, info], 1)
 					} else if (a.toJSON().data[3] == 0x4) {
 						// disconnected
-						this.State = 0;
+						this.State = States.STATE_OFFLINE;
 						let reason: string = (unpackString(a.toJSON().data.slice(4)).result);
-						this.State = -1;
+						// this.State = -1;
 						this.emit("disconnect", reason);
 					}
 
@@ -524,12 +536,6 @@ class Client extends EventEmitter {
 					this.SendMsgEx(info, 1);
 
 
-				} else if (unpacked.chunks[0] && chunkMessages.includes("SV_READY_TO_ENTER")) {
-
-					if (this.State != 3) {
-						this.emit('connected');
-					}
-					this.State = 3
 				} else if (unpacked.chunks[0] && chunkMessages.includes("PING")) {
 					var info = new MsgPacker(23, true);
 					this.SendMsgEx(info, 1)
@@ -537,9 +543,9 @@ class Client extends EventEmitter {
 				if (chunkMessages.includes("SNAP") || chunkMessages.includes("SNAP_EMPTY") || chunkMessages.includes("SNAP_SINGLE")) {
 					this.receivedSnaps++; /* wait for 2 ss before seeing self as connected */
 					if (this.receivedSnaps == 2) {
-						if (this.State != 3)
+						if (this.State != States.STATE_ONLINE)
 							this.emit('connected')
-						this.State = 3;
+						this.State = States.STATE_ONLINE;
 					}
 
 					var chunks = unpacked.chunks.filter(a => a.msg == "SNAP" || a.msg == "SNAP_SINGLE" || a.msg == "SNAP_EMPTY");
@@ -589,7 +595,7 @@ class Client extends EventEmitter {
 					}
 
 				}
-				if (new Date().getTime() - this.time >= 1000 && this.State == 3) {
+				if (new Date().getTime() - this.time >= 1000 && this.State == States.STATE_ONLINE) {
 					this.time = new Date().getTime();
 					this.SendControlMsg(0);
 				}
@@ -597,7 +603,7 @@ class Client extends EventEmitter {
 	}
 
 	sendInput(input = this.movement.input) {
-		if (this.State != 3)
+		if (this.State != States.STATE_ONLINE)
 			return;
 
 		let inputMsg = new MsgPacker(16, true);
@@ -638,7 +644,7 @@ class Client extends EventEmitter {
 				if (this.socket)
 					this.socket.close();
 				this.socket = undefined
-				this.State = -1;
+				this.State = States.STATE_OFFLINE;
 			})
 		})
 	}
