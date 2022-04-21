@@ -1,4 +1,4 @@
-var MsgUnpacker = require('./MsgUnpacker');
+import { MsgUnpacker } from "./MsgUnpacker";
 var decoder = new TextDecoder('utf-8');
 
 const itemAppendix: {"type_id": number, "size": number, "name": string}[] = [
@@ -287,11 +287,11 @@ class Snapshot {
 		
 		return _item;
 	}
-	unpackSnapshot(snap: number[], lost = 0) {
-		// var size = MsgUnpacker.unpackInt(snap).result;
-	
-		snap = MsgUnpacker.unpackInt(snap).remaining;
+	unpackSnapshot(snap: number[], lost = 0) { 
+		// var size = unpackInt(snap).result;
+		let unpacker = new MsgUnpacker(snap);
 
+		// snap = unpackInt(snap).remaining; // size
 		
 		/* key = (((type_id) << 16) | (id))
 		* key_to_id = ((key) & 0xffff)
@@ -300,106 +300,55 @@ class Snapshot {
 		* https://github.com/heinrich5991/libtw2/blob/master/doc/snapshot.md
 		*/ 
 	
-		// snap = MsgUnpacker.unpackInt(snap).remaining;
-		// console.log(MsgUnpacker.unpackInt(snap).result, "tick?") // key?
-		// snap = MsgUnpacker.unpackInt(snap).remaining;
-		for (let i = 0; i < (lost); i++)
-			snap = MsgUnpacker.unpackInt(snap).remaining;
-	
-		// console.log(MsgUnpacker.unpackInt(snap).result, "?") // key?
-		// snap = MsgUnpacker.unpackInt(snap).remaining;
-		var client_infos: ClientInfo[] = [];
-		var player_infos: PlayerInfo[] = [];
-		var items: {'items': {'data': number[], 'parsed': Item, 'type_id': number, 'id': number, 'key': number}[]/*, 'client_infos': client_info[], 'player_infos': player_info[]*/, lost: number} = {items: [],/* client_infos: client_infos, player_infos: player_infos,*/ lost: 0};
-		while (snap.length != 0) {
-			snap = MsgUnpacker.unpackInt(snap).remaining;
-			const type_id = MsgUnpacker.unpackInt(snap).result;
-			// console.log(type_id, "type_id"); 
-			snap = MsgUnpacker.unpackInt(snap).remaining;
-			const id = MsgUnpacker.unpackInt(snap).result;
-			// console.log(id, "id"); 
+		// snap = unpackInt(snap).remaining;
+		// console.log(unpackInt(snap).result, "tick?") // key?
+		// snap = unpackInt(snap).remaining;
+		let num_removed_items = unpacker.unpackInt();
+		let num_item_deltas = unpacker.unpackInt();
+		unpacker.unpackInt(); // _zero padding
+		/*snapshot_delta:
+			[ 4] num_removed_items
+			[ 4] num_item_deltas
+			[ 4] _zero
+			[*4] removed_item_keys
+			[  ] item_deltas
+		*/
+
+		for (let i = 0; i < num_removed_items; i++) {
+			unpacker.unpackInt(); // removed_item_keys
+		}
+		/*item_delta:
+			[ 4] type_id
+			[ 4] id
+			[ 4] _size
+			[*4] data_delta*/
+		let items: {'items': {'data': number[], 'parsed': Item, 'type_id': number, 'id': number, 'key': number}[]/*, 'client_infos': client_info[], 'player_infos': player_info[]*/, lost: number} = {items: [],/* client_infos: client_infos, player_infos: player_infos,*/ lost: 0};
+
+		for (let i = 0; i < num_item_deltas; i++) {
+			let type_id = unpacker.unpackInt();
+			let id = unpacker.unpackInt();
 			const key = (((type_id) << 16) | (id))
 
-			// console.log(key, "key")
-			var _size = 0;
-			if (itemAppendix[type_id] && type_id > 0) {
-				// console.log("_size is not set")
-				// type_id is in itemAppendix -> _size is not set!
+			let _size;
+			if (type_id > 0 && type_id < itemAppendix.length) {
 				_size = itemAppendix[type_id].size;
-			} else {
-				// console.log("_size is set")
-				// _size is set.
-				snap = MsgUnpacker.unpackInt(snap).remaining;
-				_size = (MsgUnpacker.unpackInt(snap).result); 
-			}
-			// console.log(_size, "size!")
+			} else
+				_size = unpacker.unpackInt();
 
-			var data: number[] = []
-			for (let i = 0; i < _size; i++) {
-				if (snap.length == 0) {
-					items.lost++;
-				}
-				if (snap[0]) {
-					snap = MsgUnpacker.unpackInt(snap).remaining;
-					data.push(MsgUnpacker.unpackInt(snap).result);
-				} else
-					break;
-
+			let data = [];
+			for (let j = 0; j < _size; j++) {
+				if (unpacker.remaining.length > 0) 
+					data.push(unpacker.unpackInt());
 			}
-			if (type_id > 0x4000 || type_id == 0) {
-				if (_size == 5 && id == 0)  {
-					// console.log("DdnetCharacter???")
-					var Ddnet_Character: DdnetCharacter = {
-						flags: data[0],
-						freeze_end: data[1],
-						jumps: data[2],
-						tele_checkpoint: data[3], 
-						strong_weak_id: data[4]
-						// score: (!players[id] == undefined || typeof players[id].score == 'undefined') ? -1 : players[id].score
-					}
-					// console.log(Ddnet_Character)
-					// if (Ddnet_Character.freeze_end > 0 || Ddnet_Character.freeze_end == -1) {// freezed or deepfreezed 
-						
-					// }	// console.log(Ddnet_Character)
-				} // else
-					// console.log("lolol uuid??", _size, type_id, id, data)
-			}
-			if (type_id == 11) {
-				// obj_client_info!
-				var client_info: ClientInfo = {
-					name: this.IntsToStr(data.slice(0, 4)),
-					clan: this.IntsToStr(data.slice(4, 7)),
-					country: Number(data.slice(7, 8)),
-					skin: this.IntsToStr(data.slice(8, 14)),
-					use_custom_color: Number(data.slice(14, 15)),
-					color_body: Number(data.slice(15, 16)),
-					color_feet: Number(data.slice(16, 17)),
-					// score: (!players[id] == undefined || typeof players[id].score == 'undefined') ? -1 : players[id].score
-				}
-				client_infos[id] = client_info;
-				// console.log(client_info.name, client_info.clan, client_info.skin)
-			} else if (type_id == 10) {
-				var player_info: PlayerInfo = {
-					local: Number(data.slice(0, 1)),
-					client_id: Number(data.slice(1, 2)),
-					team: Number(data.slice(2, 3)),
-					score: Number(data.slice(3, 4)),
-					latency: Number(data.slice(4, 5))
-				}
-				player_infos[player_info.client_id] = player_info;
-				// players[id].score = player_info.score
-				// console.log(player_info, client_infos[player_info.client_id], data)
-			}
-			// if (type_id == 10 || type_id == 11) 
-				// console.log(this.parseItem(data, type_id), itemAppendix[type_id].name, type_id)
-			var parsed = this.parseItem(data, type_id)
+			// console.log(type_id, id, _size, data);
+			let parsed = this.parseItem(data, type_id)
 			
 			// console.log(data)
 			// console.log('')
 			items.items.push({data, parsed, type_id, id, key})
 		}
-		// items.client_infos = client_infos;
-		// items.player_infos = player_infos;
+
+		
 		return items;
 	}}
 // module.exports = MsgPacker;

@@ -4,7 +4,10 @@ import net from 'dgram';
 import fs from 'fs';
 import { EventEmitter } from 'stream';
 import { spawn } from 'child_process';
-import MsgUnpacker from './MsgUnpacker';
+
+import { unpackInt, unpackString, MsgUnpacker } from "./MsgUnpacker";
+
+
 import MsgPacker from './MsgPacker';
 import { Snapshot } from './snapshot';
 import Huffman from "./huffman";
@@ -114,14 +117,31 @@ function arrStartsWith(arr: number[], arrStart: number[], start = 0) {
 	}
 	return true;
 }
-interface iMessage {
+declare interface PlayerInfo {
+    local: number,
+    client_id: number,
+    team: number,
+    score: number,
+    latency: number,
+}
+
+declare interface ClientInfo {
+    name: string,
+    clan: string,
+    country: number,
+    skin: string,
+    use_custom_color: number,
+    color_body: number,
+    color_feet: number,
+}
+declare interface iMessage {
 	team: number,
 	client_id: number,
 	author?: { ClientInfo: ClientInfo, PlayerInfo: PlayerInfo },
 	message: string
 }
 
-interface iKillMsg {
+declare interface iKillMsg {
 	killer_id: number,
 	killer?: { ClientInfo: ClientInfo, PlayerInfo: PlayerInfo },
 	victim_id: number,
@@ -149,11 +169,11 @@ declare interface Client {
 	player_infos: PlayerInfo[];
 
 
-	on(event: 'connected'): this;
-	on(event: 'disconnect', reason: string): this;
+	on(event: 'connected', listener: () => void): this;
+	on(event: 'disconnect', listener: (reason: string) => void): this;
 
-	on(event: 'message', message: iMessage): this;
-	on(event: 'kill', kill: iKillMsg): this;
+	on(event: 'message', listener: (message: iMessage) => void): this;
+	on(event: 'kill', listener: (kill: iKillMsg) => void): this;
 
 }
 class Client extends EventEmitter {
@@ -312,11 +332,11 @@ class Client extends EventEmitter {
 				chat.forEach(a => {
 					if (a.msg == "SV_CHAT") {
 						var unpacked: iMessage = {} as iMessage;
-						unpacked.team = MsgUnpacker.unpackInt(a.raw.toJSON().data).result;
-						var remaining: number[] = MsgUnpacker.unpackInt(a.raw.toJSON().data).remaining;
-						unpacked.client_id = MsgUnpacker.unpackInt(remaining).result;
-						remaining = MsgUnpacker.unpackInt(remaining).remaining;
-						unpacked.message = MsgUnpacker.unpackString(remaining).result;
+						unpacked.team = unpackInt(a.raw.toJSON().data).result;
+						var remaining: number[] = unpackInt(a.raw.toJSON().data).remaining;
+						unpacked.client_id = unpackInt(remaining).result;
+						remaining = unpackInt(remaining).remaining;
+						unpacked.message = unpackString(remaining).result;
 						if (unpacked.client_id != -1)
 							unpacked.author = { ClientInfo: this.client_infos[unpacked.client_id], PlayerInfo: this.player_infos[unpacked.client_id] }
 						// console.log(unpacked)
@@ -329,13 +349,11 @@ class Client extends EventEmitter {
 				chat.forEach(a => {
 					if (a.msg == "SV_KILL_MSG") {
 						var unpacked: iKillMsg = {} as iKillMsg;
-						unpacked.killer_id = MsgUnpacker.unpackInt(a.raw.toJSON().data).result;
-						var remaining: number[] = MsgUnpacker.unpackInt(a.raw.toJSON().data).remaining;
-						unpacked.victim_id = MsgUnpacker.unpackInt(remaining).result;
-						remaining = MsgUnpacker.unpackInt(remaining).remaining;
-						unpacked.weapon = MsgUnpacker.unpackInt(remaining).result;
-						remaining = MsgUnpacker.unpackInt(remaining).remaining;
-						unpacked.special_mode = MsgUnpacker.unpackInt(remaining).result;
+						let unpacker = new MsgUnpacker(a.raw.toJSON().data);
+						unpacked.killer_id = unpacker.unpackInt();
+						unpacked.victim_id = unpacker.unpackInt();
+						unpacked.weapon = unpacker.unpackInt();
+						unpacked.special_mode = unpacker.unpackInt();
 						if (unpacked.victim_id != -1)
 							unpacked.victim = { ClientInfo: this.client_infos[unpacked.victim_id], PlayerInfo: this.player_infos[unpacked.victim_id] }
 						if (unpacked.killer_id != -1)
@@ -369,7 +387,7 @@ class Client extends EventEmitter {
 				} else if (a.toJSON().data[3] == 0x4) {
 					// disconnected
 					this.State = 0;
-					let reason: string = (MsgUnpacker.unpackString(a.toJSON().data.slice(4)).result);
+					let reason: string = (unpackString(a.toJSON().data.slice(4)).result);
 					this.State = -1;
 					this.emit("disconnect", reason);
 				}
@@ -417,19 +435,19 @@ class Client extends EventEmitter {
 					let part = 0;
 					let num_parts = 1;
 					chunks.forEach(chunk => {
-						let AckGameTick = (MsgUnpacker.unpackInt(chunk.raw.toJSON().data).result);
-						chunk.raw = Buffer.from(MsgUnpacker.unpackInt(chunk?.raw?.toJSON().data).remaining);
-						let DeltaTick = MsgUnpacker.unpackInt(chunk?.raw?.toJSON().data).result
+						let AckGameTick = (unpackInt(chunk.raw.toJSON().data).result);
+						chunk.raw = Buffer.from(unpackInt(chunk?.raw?.toJSON().data).remaining);
+						let DeltaTick = unpackInt(chunk?.raw?.toJSON().data).result
 						if (chunk.msg == "SNAP") {
-							chunk.raw = Buffer.from(MsgUnpacker.unpackInt(chunk?.raw?.toJSON().data).remaining); // delta tick
-							num_parts = (MsgUnpacker.unpackInt(chunk?.raw?.toJSON().data).result)
-							chunk.raw = Buffer.from(MsgUnpacker.unpackInt(chunk?.raw?.toJSON().data).remaining); // num parts
-							part = (MsgUnpacker.unpackInt(chunk?.raw?.toJSON().data).result)
+							chunk.raw = Buffer.from(unpackInt(chunk?.raw?.toJSON().data).remaining); // delta tick
+							num_parts = (unpackInt(chunk?.raw?.toJSON().data).result)
+							chunk.raw = Buffer.from(unpackInt(chunk?.raw?.toJSON().data).remaining); // num parts
+							part = (unpackInt(chunk?.raw?.toJSON().data).result)
 						}
-						chunk.raw = Buffer.from(MsgUnpacker.unpackInt(chunk?.raw?.toJSON().data).remaining); // part
+						chunk.raw = Buffer.from(unpackInt(chunk?.raw?.toJSON().data).remaining); // part
 						if (chunk.msg != "SNAP_EMPTY")
-							chunk.raw = Buffer.from(MsgUnpacker.unpackInt(chunk?.raw?.toJSON().data).remaining); // crc
-						chunk.raw = Buffer.from(MsgUnpacker.unpackInt(chunk?.raw?.toJSON().data).remaining); // crc
+							chunk.raw = Buffer.from(unpackInt(chunk?.raw?.toJSON().data).remaining); // crc
+						chunk.raw = Buffer.from(unpackInt(chunk?.raw?.toJSON().data).remaining); // crc
 						if (part == 0 || this.snaps.length > 30) {
 							this.snaps = [];
 						}
