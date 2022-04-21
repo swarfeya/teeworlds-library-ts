@@ -7,6 +7,7 @@ import { spawn } from 'child_process';
 
 import { unpackInt, unpackString, MsgUnpacker } from "./MsgUnpacker";
 
+import Movement from './movement';
 
 import MsgPacker from './MsgPacker';
 import { Snapshot } from './snapshot';
@@ -14,6 +15,19 @@ import Huffman from "./huffman";
 
 const huff = new Huffman();
 const SnapUnpacker = new Snapshot();
+
+interface NetObj_PlayerInput {
+	m_Direction: number,
+	m_TargetX: number,
+	m_TargetY: number,
+	m_Jump: number,
+	m_Fire: number,
+	m_Hook: number,
+	m_PlayerFlags: number,
+	m_WantedWeapon: number,
+	m_NextWeapon: number,
+	m_PrevWeapon: number
+};
 
 enum NETMSGTYPE {
 	EX,
@@ -118,21 +132,21 @@ function arrStartsWith(arr: number[], arrStart: number[], start = 0) {
 	return true;
 }
 declare interface PlayerInfo {
-    local: number,
-    client_id: number,
-    team: number,
-    score: number,
-    latency: number,
+	local: number,
+	client_id: number,
+	team: number,
+	score: number,
+	latency: number,
 }
 
 declare interface ClientInfo {
-    name: string,
-    clan: string,
-    country: number,
-    skin: string,
-    use_custom_color: number,
-    color_body: number,
-    color_feet: number,
+	name: string,
+	clan: string,
+	country: number,
+	skin: string,
+	use_custom_color: number,
+	color_body: number,
+	color_feet: number,
 }
 declare interface iMessage {
 	team: number,
@@ -164,6 +178,12 @@ declare interface Client {
 	TKEN: Buffer;
 	time: number;
 
+	timer: number;
+	PredGameTick: number;
+	AckGameTick: number;
+
+	movement: Movement;
+
 	snaps: Buffer[];
 	client_infos: ClientInfo[];
 	player_infos: PlayerInfo[];
@@ -185,6 +205,12 @@ class Client extends EventEmitter {
 		this.host = ip;
 		this.port = port;
 		this.name = nickname;
+		this.AckGameTick = 0;
+		this.PredGameTick = 0;
+
+		this.timer = 0;
+
+		this.movement = new Movement();
 
 		this.snaps = [];
 		this.client_infos = [];
@@ -203,7 +229,7 @@ class Client extends EventEmitter {
 		this.time = new Date().getTime() + 2000; // time (used for keepalives, start to send keepalives after 2 seconds)
 		this.State = 0;
 	}
-	async Unpack(packet: Buffer): Promise<_packet> {
+	Unpack(packet: Buffer): _packet {
 		var unpacked: _packet = { twprotocol: { flags: packet[0], ack: packet[1], chunkAmount: packet[2], size: packet.byteLength - 3 }, chunks: [] }
 
 
@@ -274,10 +300,13 @@ class Client extends EventEmitter {
 			header[1] |= (this.clientAck >> 2) & 0xf0;
 			header[2] = this.clientAck & 0xff;
 		}
-		var latestBuf = Buffer.from([0x0 + (((16 << 4) & 0xf0) | ((this.ack >> 8) & 0xf)), this.ack & 0xff, 0x1, header[0], header[1], this.clientAck]);
-		var latestBuf = Buffer.concat([latestBuf, Msg.buffer, this.TKEN]);
 
-		this.socket.send(latestBuf, 0, latestBuf.length, this.port, this.host)
+		let latestBuf = Buffer.from([0x0 + (((16 << 4) & 0xf0) | ((this.ack >> 8) & 0xf)), this.ack & 0xff, 0x1, header[0], header[1]]);
+		if (Flags & 1)
+			latestBuf = Buffer.concat([latestBuf, Buffer.from([this.clientAck])]);
+		latestBuf = Buffer.concat([latestBuf, Msg.buffer, this.TKEN]);
+		this.socket.send(latestBuf, 0, latestBuf.length, this.port, this.host);
+
 	}
 	SendMsgExWithChunks(Msgs: MsgPacker[], Flags: number) {
 		if (this.State == -1)
@@ -306,139 +335,99 @@ class Client extends EventEmitter {
 		this.socket.send(packet, 0, packet.length, this.port, this.host)
 	}
 	connect() {
+		let predTimer = setInterval(() => {
+			if (this.State == 3 && this.AckGameTick > 0) {
+				this.PredGameTick++;
+				// console.log(this.PredGameTick, this.AckGameTick)
+			}
+		}, 20);
+
 		this.SendControlMsg(1, "TKEN")
 		let connectInterval = setInterval(() => {
 			if (this.State == 0)
 				this.SendControlMsg(1, "TKEN")
 			else
 				clearInterval(connectInterval)
+		}, 500);
+
+		setInterval(() => {
+			// if (new Date().getTime() - this.time >= 1000) {
+			if (this.State != 3)
+				return;
+			this.time = new Date().getTime();
+			// this.SendControlMsg(0);
+			// console.log("sending with " + this.AckGameTick)
+			this.sendInput();
+			// }
 		}, 500)
+
 		this.time = new Date().getTime() + 2000; // start sending keepalives after 2s
+
 		if (this.socket)
-		this.socket.on("message", async (a) => {
-			var unpacked: _packet = await this.Unpack(a)
-			if (unpacked.twprotocol.flags != 128 && unpacked.twprotocol.ack) {
-				unpacked.chunks.forEach(a => {
-					if (a.msg && !a.msg.startsWith("SNAP")) {
-						if (a.seq != undefined && a.seq != -1)
-							this.ack = a.seq
+			this.socket.on("message", (a) => {
+				clearInterval(connectInterval)
+				if (a.toJSON().data[0] == 0x10) {
+					if (a.toString().includes("TKEN") || a.toJSON().data[3] == 0x2) {
+						clearInterval(connectInterval);
+						this.TKEN = Buffer.from(a.toJSON().data.slice(a.toJSON().data.length - 4, a.toJSON().data.length))
+						this.SendControlMsg(3);
+						this.State = 2; // loading state
+						var info = new MsgPacker(1, true);
+						info.AddString("0.6 626fce9a778df4d4");
+						info.AddString(""); // password
 
+						var client_version = new MsgPacker(0, true);
+						client_version.AddBuffer(Buffer.from("8c00130484613e478787f672b3835bd4", 'hex'));
+						let randomUuid = new Uint8Array(16);
+
+						randomBytes(16).copy(randomUuid);
+
+						client_version.AddBuffer(Buffer.from(randomUuid));
+						client_version.AddInt(15091);
+						client_version.AddString("DDNet 15.9.1");
+
+						this.SendMsgExWithChunks([client_version, info], 1)
+					} else if (a.toJSON().data[3] == 0x4) {
+						// disconnected
+						this.State = 0;
+						let reason: string = (unpackString(a.toJSON().data.slice(4)).result);
+						this.State = -1;
+						this.emit("disconnect", reason);
 					}
-				})
-			}
-			var chunkMessages = unpacked.chunks.map(a => a.msg)
-			if (chunkMessages.includes("SV_CHAT")) {
-				var chat = unpacked.chunks.filter(a => a.msg == "SV_CHAT");
-				chat.forEach(a => {
-					if (a.msg == "SV_CHAT") {
-						var unpacked: iMessage = {} as iMessage;
-						unpacked.team = unpackInt(a.raw.toJSON().data).result;
-						var remaining: number[] = unpackInt(a.raw.toJSON().data).remaining;
-						unpacked.client_id = unpackInt(remaining).result;
-						remaining = unpackInt(remaining).remaining;
-						unpacked.message = unpackString(remaining).result;
-						if (unpacked.client_id != -1)
-							unpacked.author = { ClientInfo: this.client_infos[unpacked.client_id], PlayerInfo: this.player_infos[unpacked.client_id] }
-						// console.log(unpacked)
-						this.emit("message", unpacked)
-					}
-				})
-			}
-			if (chunkMessages.includes("SV_KILL_MSG")) {
-				var chat = unpacked.chunks.filter(a => a.msg == "SV_KILL_MSG");
-				chat.forEach(a => {
-					if (a.msg == "SV_KILL_MSG") {
-						var unpacked: iKillMsg = {} as iKillMsg;
-						let unpacker = new MsgUnpacker(a.raw.toJSON().data);
-						unpacked.killer_id = unpacker.unpackInt();
-						unpacked.victim_id = unpacker.unpackInt();
-						unpacked.weapon = unpacker.unpackInt();
-						unpacked.special_mode = unpacker.unpackInt();
-						if (unpacked.victim_id != -1)
-							unpacked.victim = { ClientInfo: this.client_infos[unpacked.victim_id], PlayerInfo: this.player_infos[unpacked.victim_id] }
-						if (unpacked.killer_id != -1)
-							unpacked.killer = { ClientInfo: this.client_infos[unpacked.killer_id], PlayerInfo: this.player_infos[unpacked.killer_id] }
-						// console.log(unpacked)
-						this.emit("kill", unpacked)
-					}
-				})
-			}
-			if (a.toJSON().data[0] == 0x10) {
-				if (a.toString().includes("TKEN") || arrStartsWith(a.toJSON().data, [0x10, 0x0, 0x0, 0x0])) {
-					clearInterval(connectInterval);
-					this.TKEN = Buffer.from(a.toJSON().data.slice(a.toJSON().data.length - 4, a.toJSON().data.length))
-					this.SendControlMsg(3);
-					this.State = 2; // loading state
-					var info = new MsgPacker(1, true);
-					info.AddString("0.6 626fce9a778df4d4");
-					info.AddString(""); // password
 
-					var client_version = new MsgPacker(0, true);
-					client_version.AddBuffer(Buffer.from("8c00130484613e478787f672b3835bd4", 'hex'));
-					let randomUuid = new Uint8Array(16);
-
-					randomBytes(16).copy(randomUuid);
-
-					client_version.AddBuffer(Buffer.from(randomUuid));
-					client_version.AddInt(15091);
-					client_version.AddString("DDNet 15.9.1");
-
-					this.SendMsgExWithChunks([client_version, info], 1)
-				} else if (a.toJSON().data[3] == 0x4) {
-					// disconnected
-					this.State = 0;
-					let reason: string = (unpackString(a.toJSON().data.slice(4)).result);
-					this.State = -1;
-					this.emit("disconnect", reason);
 				}
+				var unpacked: _packet = this.Unpack(a)
+				if (unpacked.twprotocol.flags != 128 && unpacked.twprotocol.ack) {
+					unpacked.chunks.forEach(a => {
+						if (a.flags & 1) { // vital
+							if (a.seq != undefined && a.seq != -1)
+								this.ack = a.seq
+							else
+								console.log("no seq", a)
 
-			}
-			if (unpacked.chunks[0] && chunkMessages.includes("SV_READY_TO_ENTER")) {
-				var Msg = new MsgPacker(15, true); /* entergame */
-				this.SendMsgEx(Msg, 1);
-			} else if ((unpacked.chunks[0] && chunkMessages.includes("CAPABILITIES") || unpacked.chunks[0] && chunkMessages.includes("MAP_CHANGE"))) {
-				// send ready
-				var Msg = new MsgPacker(14, true); /* ready */
-				this.SendMsgEx(Msg, 1);
-			} else if ((unpacked.chunks[0] && chunkMessages.includes("CON_READY") || unpacked.chunks[0] && chunkMessages.includes("SV_MOTD"))) {
-				var info = new MsgPacker(20, false);
-				info.AddString(this.name); /* name */
-				info.AddString(""); /* clan */
-				info.AddInt(-1); /* country */
-				info.AddString("greyfox"); /* skin */
-				info.AddInt(1); /* use custom color */
-				info.AddInt(10346103); /* color body */
-				info.AddInt(65535); /* color feet */
-				this.SendMsgEx(info, 1);
-
-
-			} else if (unpacked.chunks[0] && chunkMessages.includes("SV_READY_TO_ENTER")) {
-
-				if (this.State != 3) {
-					this.emit('connected');
+						}
+					})
 				}
-				this.State = 3
-			} else if (unpacked.chunks[0] && chunkMessages.includes("PING")) {
-				var info = new MsgPacker(23, true);
-				this.SendMsgEx(info, 1)
-			}
-			if (chunkMessages.includes("SNAP") || chunkMessages.includes("SNAP_EMPTY") || chunkMessages.includes("SNAP_SINGLE")) {
-				this.receivedSnaps++; /* wait for 2 ss before seeing self as connected */
-				if (this.receivedSnaps >= 2) {
-					if (this.State != 3)
-						this.emit('connected')
-					this.State = 3
-				}
-
-				var chunks = unpacked.chunks.filter(a => a.msg == "SNAP" || a.msg == "SNAP_SINGLE" || a.msg == "SNAP_EMPTY");
-				if (chunks.length > 0) {
+				var snapChunks = unpacked.chunks.filter(a => a.msg === "SNAP" || a.msg === "SNAP_SINGLE" || a.msg === "SNAP_EMPTY");
+				// console.log(unpacked.chunks.length, unpacked)
+				if (snapChunks.length > 0) {
 					let part = 0;
 					let num_parts = 1;
-					chunks.forEach(chunk => {
+					snapChunks.forEach(chunk => {
 						let AckGameTick = (unpackInt(chunk.raw.toJSON().data).result);
+						// setImmediate(() => {
+						// console.log(AckGameTick, this.AckGameTick, chunk.msg)
+						if (AckGameTick > this.AckGameTick) {
+							this.AckGameTick = AckGameTick;
+							if (Math.abs(this.PredGameTick - this.AckGameTick) > 10)
+								this.PredGameTick = AckGameTick + 1;
+							// console.log(this.AckGameTick)
+						}
+						// })
+
 						chunk.raw = Buffer.from(unpackInt(chunk?.raw?.toJSON().data).remaining);
 						let DeltaTick = unpackInt(chunk?.raw?.toJSON().data).result
-						if (chunk.msg == "SNAP") {
+						if (chunk.msg === "SNAP") {
 							chunk.raw = Buffer.from(unpackInt(chunk?.raw?.toJSON().data).remaining); // delta tick
 							num_parts = (unpackInt(chunk?.raw?.toJSON().data).result)
 							chunk.raw = Buffer.from(unpackInt(chunk?.raw?.toJSON().data).remaining); // num parts
@@ -448,40 +437,198 @@ class Client extends EventEmitter {
 						if (chunk.msg != "SNAP_EMPTY")
 							chunk.raw = Buffer.from(unpackInt(chunk?.raw?.toJSON().data).remaining); // crc
 						chunk.raw = Buffer.from(unpackInt(chunk?.raw?.toJSON().data).remaining); // crc
-						if (part == 0 || this.snaps.length > 30) {
+						if (part === 0 || this.snaps.length > 30) {
 							this.snaps = [];
 						}
+						chunk.raw = Buffer.from(unpackInt(chunk?.raw?.toJSON().data).remaining); // crc
 						this.snaps.push(chunk.raw)
+						// console.log(this.PredGameTick - this.AckGameTick, this.PredGameTick, this.AckGameTick)
 
-						if ((num_parts - 1) == part && this.snaps.length == num_parts) {
+						if ((num_parts - 1) === part && this.snaps.length === num_parts) {
 							let mergedSnaps = Buffer.concat(this.snaps);
 							let snapUnpacked = SnapUnpacker.unpackSnapshot(mergedSnaps.toJSON().data, 1)
+							// console.log(snapUnpacked)
 
 							snapUnpacked.items.forEach((a, i) => {
-								if (a.type_id == items.OBJ_CLIENT_INFO) {
-									this.client_infos[a.id] = a.parsed as ClientInfo;
+								if (a.type_id === items.OBJ_CLIENT_INFO) {
 									// console.log(a.parsed, i)
-									// console.log(this.client_infos[a.id])
-								} else if (a.type_id == items.OBJ_PLAYER_INFO) {
-									this.player_infos[i] = a.parsed as PlayerInfo;
-								} else if (a.type_id == items.OBJ_EX || a.type_id > 0x4000) {
-									if (a.data.length == 5 && ((a.parsed as DdnetCharacter).freeze_end > 0 || (a.parsed as DdnetCharacter).freeze_end == -1)) {
-										// var packer = new MsgPacker(22, false)
-										// this.SendMsgEx(packer, 1)
+									this.client_infos[a.id] = a.parsed as ClientInfo;
+									if ((a.parsed as ClientInfo).name.includes("������")) {
+										console.log(this.PredGameTick, this.AckGameTick, mergedSnaps.toJSON().data.toString())
 									}
+									console.log(this.client_infos[a.id].name, this.client_infos[a.id].clan, [a.id])
 								}
+								//   else if (a.type_id === items.OBJ_PLAYER_INFO) {
+								// this.player_infos[a.id] = a.parsed as PlayerInfo;
+								// }
 							})
 						}
 
+
+					})
+				}
+				var chunkMessages = unpacked.chunks.map(a => a.msg)
+				if (chunkMessages.includes("SV_CHAT")) {
+					var chat = unpacked.chunks.filter(a => a.msg == "SV_CHAT");
+					chat.forEach(a => {
+						if (a.msg == "SV_CHAT") {
+							var unpacked: iMessage = {} as iMessage;
+							unpacked.team = unpackInt(a.raw.toJSON().data).result;
+							var remaining: number[] = unpackInt(a.raw.toJSON().data).remaining;
+							unpacked.client_id = unpackInt(remaining).result;
+							remaining = unpackInt(remaining).remaining;
+							unpacked.message = unpackString(remaining).result;
+							if (unpacked.client_id != -1)
+								unpacked.author = { ClientInfo: this.client_infos[unpacked.client_id], PlayerInfo: this.player_infos[unpacked.client_id] }
+							// console.log(unpacked)
+							this.emit("message", unpacked)
+						}
+					})
+				}
+				if (chunkMessages.includes("SV_KILL_MSG")) {
+					var chat = unpacked.chunks.filter(a => a.msg == "SV_KILL_MSG");
+					chat.forEach(a => {
+						if (a.msg == "SV_KILL_MSG") {
+							var unpacked: iKillMsg = {} as iKillMsg;
+							let unpacker = new MsgUnpacker(a.raw.toJSON().data);
+							unpacked.killer_id = unpacker.unpackInt();
+							unpacked.victim_id = unpacker.unpackInt();
+							unpacked.weapon = unpacker.unpackInt();
+							unpacked.special_mode = unpacker.unpackInt();
+							if (unpacked.victim_id != -1)
+								unpacked.victim = { ClientInfo: this.client_infos[unpacked.victim_id], PlayerInfo: this.player_infos[unpacked.victim_id] }
+							if (unpacked.killer_id != -1)
+								unpacked.killer = { ClientInfo: this.client_infos[unpacked.killer_id], PlayerInfo: this.player_infos[unpacked.killer_id] }
+							// console.log(unpacked)
+							this.emit("kill", unpacked)
+						}
 					})
 				}
 
-			}
-			if (new Date().getTime() - this.time >= 1000) {
-				this.time = new Date().getTime();
-				this.SendControlMsg(0);
-			}
-		})
+				if (unpacked.chunks[0] && chunkMessages.includes("SV_READY_TO_ENTER")) {
+					var Msg = new MsgPacker(15, true); /* entergame */
+					this.SendMsgEx(Msg, 1);
+				} else if ((unpacked.chunks[0] && chunkMessages.includes("CAPABILITIES") || unpacked.chunks[0] && chunkMessages.includes("MAP_CHANGE"))) {
+					// send ready
+					var Msg = new MsgPacker(14, true); /* ready */
+					this.SendMsgEx(Msg, 1);
+				} else if ((unpacked.chunks[0] && chunkMessages.includes("CON_READY") || unpacked.chunks[0] && chunkMessages.includes("SV_MOTD"))) {
+					var info = new MsgPacker(20, false);
+					info.AddString(this.name); /* name */
+					info.AddString(""); /* clan */
+					info.AddInt(-1); /* country */
+					info.AddString("greyfox"); /* skin */
+					info.AddInt(1); /* use custom color */
+					info.AddInt(10346103); /* color body */
+					info.AddInt(65535); /* color feet */
+					this.SendMsgEx(info, 1);
+
+
+				} else if (unpacked.chunks[0] && chunkMessages.includes("SV_READY_TO_ENTER")) {
+
+					if (this.State != 3) {
+						this.emit('connected');
+					}
+					this.State = 3
+				} else if (unpacked.chunks[0] && chunkMessages.includes("PING")) {
+					var info = new MsgPacker(23, true);
+					this.SendMsgEx(info, 1)
+				}
+				if (chunkMessages.includes("SNAP") || chunkMessages.includes("SNAP_EMPTY") || chunkMessages.includes("SNAP_SINGLE")) {
+					this.receivedSnaps++; /* wait for 2 ss before seeing self as connected */
+					if (this.receivedSnaps == 2) {
+						if (this.State != 3)
+							this.emit('connected')
+						this.State = 3;
+					}
+
+					var chunks = unpacked.chunks.filter(a => a.msg == "SNAP" || a.msg == "SNAP_SINGLE" || a.msg == "SNAP_EMPTY");
+					if (chunks.length > 0) {
+						let part = 0;
+						let num_parts = 1;
+						chunks.forEach(chunk => {
+							let AckGameTick = (unpackInt(chunk.raw.toJSON().data).result);
+							chunk.raw = Buffer.from(unpackInt(chunk?.raw?.toJSON().data).remaining);
+							let DeltaTick = unpackInt(chunk?.raw?.toJSON().data).result
+							if (chunk.msg == "SNAP") {
+								chunk.raw = Buffer.from(unpackInt(chunk?.raw?.toJSON().data).remaining); // delta tick
+								num_parts = (unpackInt(chunk?.raw?.toJSON().data).result)
+								chunk.raw = Buffer.from(unpackInt(chunk?.raw?.toJSON().data).remaining); // num parts
+								part = (unpackInt(chunk?.raw?.toJSON().data).result)
+							}
+							chunk.raw = Buffer.from(unpackInt(chunk?.raw?.toJSON().data).remaining); // part
+							if (chunk.msg != "SNAP_EMPTY")
+								chunk.raw = Buffer.from(unpackInt(chunk?.raw?.toJSON().data).remaining); // crc
+							chunk.raw = Buffer.from(unpackInt(chunk?.raw?.toJSON().data).remaining); // crc
+							if (part == 0 || this.snaps.length > 30) {
+								this.snaps = [];
+							}
+							this.snaps.push(chunk.raw)
+
+							if ((num_parts - 1) == part && this.snaps.length == num_parts) {
+								let mergedSnaps = Buffer.concat(this.snaps);
+								let snapUnpacked = SnapUnpacker.unpackSnapshot(mergedSnaps.toJSON().data, 1)
+
+								snapUnpacked.items.forEach((a, i) => {
+									if (a.type_id == items.OBJ_CLIENT_INFO) {
+										this.client_infos[a.id] = a.parsed as ClientInfo;
+										// console.log(a.parsed, i)
+										// console.log(this.client_infos[a.id])
+									} else if (a.type_id == items.OBJ_PLAYER_INFO) {
+										this.player_infos[i] = a.parsed as PlayerInfo;
+									} else if (a.type_id == items.OBJ_EX || a.type_id > 0x4000) {
+										if (a.data.length == 5 && ((a.parsed as DdnetCharacter).freeze_end > 0 || (a.parsed as DdnetCharacter).freeze_end == -1)) {
+											// var packer = new MsgPacker(22, false)
+											// this.SendMsgEx(packer, 1)
+										}
+									}
+								})
+							}
+
+						})
+					}
+
+				}
+				if (new Date().getTime() - this.time >= 1000) {
+					this.time = new Date().getTime();
+					this.SendControlMsg(0);
+				}
+			})
+	}
+
+	sendInput(input = this.movement.input) {
+		if (this.State != 3)
+			return;
+
+		let inputMsg = new MsgPacker(16, true);
+		inputMsg.AddInt(this.AckGameTick);
+		inputMsg.AddInt(this.PredGameTick);
+		inputMsg.AddInt(40);
+		// let playerflags = 2;
+		// playerflags |= 8; // scoreboard
+		// playerflags |= 16; // aimline
+
+		let input_data = [
+
+			input.m_Direction,
+			input.m_TargetX,
+			input.m_TargetY,
+			input.m_Jump,
+			input.m_Fire,
+			input.m_Hook,
+			input.m_PlayerFlags,
+			input.m_WantedWeapon,
+			input.m_NextWeapon,
+			input.m_PrevWeapon
+		]
+		// console.log(this.player_infos, this.client_infos)
+		input_data.forEach(a => {
+			inputMsg.AddInt(a);
+		});
+		this.SendMsgEx(inputMsg, 0);
+	}
+	get input() {
+		return this.movement.input;
 	}
 
 	Disconnect() {
@@ -532,6 +679,7 @@ class Client extends EventEmitter {
 		packer.AddInt(emote);
 		this.SendMsgEx(packer, 1);
 	}
+
 
 }
 export = Client;
