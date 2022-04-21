@@ -589,7 +589,7 @@ class Client extends EventEmitter {
 					}
 
 				}
-				if (new Date().getTime() - this.time >= 1000) {
+				if (new Date().getTime() - this.time >= 1000 && this.State == 3) {
 					this.time = new Date().getTime();
 					this.SendControlMsg(0);
 				}
