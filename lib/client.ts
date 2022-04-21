@@ -183,7 +183,6 @@ declare interface Client {
 	clientAck: number;
 	receivedSnaps: number; /* wait for 2 ss before seeing self as connected */
 	lastMsg: string;
-	_port: number;
 	socket: net.Socket | undefined;
 	TKEN: Buffer;
 	time: number;
@@ -197,6 +196,10 @@ declare interface Client {
 	snaps: Buffer[];
 	client_infos: ClientInfo[];
 	player_infos: PlayerInfo[];
+
+	sentChunkQueue: Buffer[];
+
+	lastSendTime: number;
 
 
 	on(event: 'connected', listener: () => void): this;
@@ -226,17 +229,21 @@ class Client extends EventEmitter {
 		this.client_infos = [];
 		this.player_infos = [];
 
+		this.sentChunkQueue = [];
+
 		this.State = States.STATE_OFFLINE; // 0 = offline; 1 = STATE_CONNECTING = 1, STATE_LOADING = 2, STATE_ONLINE = 3
 		this.ack = 0; // ack of messages the client has received
 		this.clientAck = 0; // ack of messages the client has sent
 		this.receivedSnaps = 0; /* wait for 2 snaps before seeing self as connected */
 		this.lastMsg = "";
-		this._port = Math.floor(Math.random() * 65535)
 		this.socket = net.createSocket("udp4")
 		this.socket.bind();
 
 		this.TKEN = Buffer.from([255, 255, 255, 255])
 		this.time = new Date().getTime() + 2000; // time (used for keepalives, start to send keepalives after 2 seconds)
+
+		this.lastSendTime = new Date().getTime();
+
 	}
 	Unpack(packet: Buffer): _packet {
 		var unpacked: _packet = { twprotocol: { flags: packet[0], ack: packet[1], chunkAmount: packet[2], size: packet.byteLength - 3 }, chunks: [] }
@@ -280,6 +287,7 @@ class Client extends EventEmitter {
 		return unpacked
 	}
 	SendControlMsg(msg: number, ExtraMsg: string = "") {
+		this.lastSendTime = new Date().getTime();
 		return new Promise((resolve, reject) => {
 			if (this.socket) {
 				var latestBuf = Buffer.from([0x10 + (((16 << 4) & 0xf0) | ((this.ack >> 8) & 0xf)), this.ack & 0xff, 0x00, msg])
@@ -301,6 +309,7 @@ class Client extends EventEmitter {
 			throw new Error("Client is not connected");
 		if (!this.socket)
 			return;
+		this.lastSendTime = new Date().getTime();
 		var header = []
 		header[0] = ((Flags & 3) << 6) | ((Msg.size >> 4) & 0x3f);
 		header[1] = (Msg.size & 0xf);
@@ -308,6 +317,8 @@ class Client extends EventEmitter {
 			this.clientAck = (this.clientAck + 1) % (1 << 10);
 			header[1] |= (this.clientAck >> 2) & 0xf0;
 			header[2] = this.clientAck & 0xff;
+
+			this.sentChunkQueue.push(Buffer.concat([Buffer.from(header), Msg.buffer]));
 		}
 
 		let latestBuf = Buffer.from([0x0 + (((16 << 4) & 0xf0) | ((this.ack >> 8) & 0xf)), this.ack & 0xff, 0x1, header[0], header[1]]);
@@ -322,16 +333,25 @@ class Client extends EventEmitter {
 			throw new Error("Client is not connected");
 		if (!this.socket)
 			return;
-		var header: any[][] = [];
+		this.lastSendTime = new Date().getTime();
+		var header: Buffer[] = [];
 
 		Msgs.forEach((Msg: MsgPacker, index) => {
-			header[index] = new Array(2);
+			header[index] = Buffer.alloc((Flags & 1 ? 3 : 2));
 			header[index][0] = ((Flags & 3) << 6) | ((Msg.size >> 4) & 0x3f);
 			header[index][1] = (Msg.size & 0xf);
 			if (Flags & 1) {
 				this.clientAck = (this.clientAck + 1) % (1 << 10);
 				header[index][1] |= (this.clientAck >> 2) & 0xf0;
 				header[index][2] = this.clientAck & 0xff;
+
+				header[index][0] = (((Flags | 2)&3)<<6)|((Msg.size>>4)&0x3f); // 2 is resend flag (ugly hack for queue)
+				
+				this.sentChunkQueue.push(Buffer.concat([header[index], Msg.buffer]));
+
+				header[index][0] = (((Flags)&3)<<6)|((Msg.size>>4)&0x3f);
+
+
 			}
 		})
 		var packetHeader = Buffer.from([0x0 + (((16 << 4) & 0xf0) | ((this.ack >> 8) & 0xf)), this.ack & 0xff, Msgs.length]);
@@ -343,6 +363,49 @@ class Client extends EventEmitter {
 
 		this.socket.send(packet, 0, packet.length, this.port, this.host)
 	}
+	SendMsgRaw(chunks: Buffer[]) {
+		if (this.State == States.STATE_OFFLINE)
+			throw new Error("Client is not connected");
+		if (!this.socket)
+			return;
+
+		this.lastSendTime = new Date().getTime();
+
+		var packetHeader = Buffer.from([0x0+(((16<<4)&0xf0)|((this.ack>>8)&0xf)), this.ack&0xff, chunks.length]);
+
+		var packet = Buffer.concat([(packetHeader), Buffer.concat(chunks), this.TKEN]);
+		
+		this.socket.send(packet, 0, packet.length, this.port, this.host)
+	}
+
+	MsgToChunk(packet: Buffer) {
+		var chunk: chunk = {} as chunk;
+		// let packet = Msg.buffer;
+		chunk.bytes = ((packet[0] & 0x3f) << 4) | (packet[1] & ((1 << 4) - 1));
+		chunk.flags = (packet[0] >> 6) & 3;
+		chunk.sequence = -1;
+		
+		if (chunk.flags & 1) {
+			chunk.seq = ((packet[1]&0xf0)<<2) | packet[2];
+			packet = packet.slice(3) // remove flags & size
+		} else
+			packet = packet.slice(2)
+		chunk.type = packet[0] & 1 ? "sys" : "game"; // & 1 = binary, ****_***1. e.g 0001_0111 sys, 0001_0110 game
+		chunk.msgid = (packet[0]-(packet[0]&1))/2;
+		chunk.msg = messageTypes[packet[0]&1][chunk.msgid];
+		// if (chunk.msg == undefined)
+			// console.log(packet)
+		chunk.raw = packet.slice(1, chunk.bytes)
+		Object.values(messageUUIDs).forEach((a, i) => {
+			if (a.compare(packet.slice(0, 16)) === 0) {
+				chunk.extended_msgid = a;
+				// chunk.type = 'sys';
+				chunk.msg = Object.keys(messageUUIDs)[i];
+			}
+		})
+		return chunk;
+	}
+
 	connect() {
 		
 		this.State = States.STATE_CONNECTING;
@@ -372,6 +435,20 @@ class Client extends EventEmitter {
 			this.sendInput();
 			// }
 		}, 500)
+
+		let resendTimeout = setInterval(() => {
+			// this.sentChunkQueue.forEach((chunk) => {
+			// if (this.State == 0) // disconnected
+				// return;
+			if (this.State != 0) {
+				if (((new Date().getTime()) - this.lastSendTime) > 900) {
+					this.SendMsgRaw([this.sentChunkQueue[0]]);
+					console.log(this.sentChunkQueue);
+				}
+			}
+			// })
+		}, 1000)
+	
 
 		this.time = new Date().getTime() + 2000; // start sending keepalives after 2s
 
@@ -408,18 +485,25 @@ class Client extends EventEmitter {
 					}
 
 				}
+				
 				var unpacked: _packet = this.Unpack(a)
-				if (unpacked.twprotocol.flags != 128 && unpacked.twprotocol.ack) {
-					unpacked.chunks.forEach(a => {
-						if (a.flags & 1) { // vital
-							if (a.seq != undefined && a.seq != -1)
-								this.ack = a.seq
-							else
-								console.log("no seq", a)
-
-						}
-					})
-				}
+				unpacked.chunks.forEach(a => {
+					if (a.flags & 1) { // vital
+						if (a.seq != undefined && a.seq != -1)
+							this.ack = a.seq
+						else
+							console.log("no seq", a)
+					}
+				})
+				this.sentChunkQueue.forEach((buff, i) => {
+					let chunk = this.MsgToChunk(buff);
+					if (chunk.flags & 1) {
+						if (chunk.seq && chunk.seq < this.ack) {
+							this.sentChunkQueue.splice(i, 1);
+							// this.ack = (this.ack + 1) % (1 << 10);
+						} 
+					} 
+				})
 				var snapChunks = unpacked.chunks.filter(a => a.msg === "SNAP" || a.msg === "SNAP_SINGLE" || a.msg === "SNAP_EMPTY");
 				// console.log(unpacked.chunks.length, unpacked)
 				if (snapChunks.length > 0) {
