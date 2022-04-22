@@ -172,7 +172,7 @@ declare interface iKillMsg {
 	special_mode: number
 }
 
-declare interface Client {
+export declare interface Client {
 	host: string;
 	port: number;
 	name: string;
@@ -207,7 +207,7 @@ declare interface Client {
 	on(event: 'kill', listener: (kill: iKillMsg) => void): this;
 
 }
-class Client extends EventEmitter {
+export class Client extends EventEmitter {
 
 
 
@@ -302,39 +302,43 @@ class Client extends EventEmitter {
 		*/
 		})
 	}
-	SendMsgEx(Msg: MsgPacker, Flags: number) {
+	// SendMsgEx(Msg: MsgPacker, Flags: number) {
+	// 	if (this.State == States.STATE_OFFLINE)
+	// 		throw new Error("Client is not connected");
+	// 	if (!this.socket)
+	// 		return;
+	// 	this.lastSendTime = new Date().getTime();
+	// 	var header = []
+	// 	header[0] = ((Flags & 3) << 6) | ((Msg.size >> 4) & 0x3f);
+	// 	header[1] = (Msg.size & 0xf);
+	// 	if (Flags & 1) {
+	// 		this.clientAck = (this.clientAck + 1) % (1 << 10);
+	// 		header[1] |= (this.clientAck >> 2) & 0xf0;
+	// 		header[2] = this.clientAck & 0xff;
+
+	// 		this.sentChunkQueue.push(Buffer.concat([Buffer.from(header), Msg.buffer]));
+	// 	}
+
+	// 	let latestBuf = Buffer.from([0x0 + (((16 << 4) & 0xf0) | ((this.ack >> 8) & 0xf)), this.ack & 0xff, 0x1, header[0], header[1]]);
+	// 	if (Flags & 1)
+	// 		latestBuf = Buffer.concat([latestBuf, Buffer.from([this.clientAck])]);
+	// 	latestBuf = Buffer.concat([latestBuf, Msg.buffer, this.TKEN]);
+	// 	this.socket.send(latestBuf, 0, latestBuf.length, this.port, this.host);
+
+	// }
+	SendMsgEx(Msgs: MsgPacker[] | MsgPacker, Flags: number) {
 		if (this.State == States.STATE_OFFLINE)
-			throw new Error("Client is not connected");
+			return; //throw new Error("Client is not connected");
 		if (!this.socket)
 			return;
-		this.lastSendTime = new Date().getTime();
-		var header = []
-		header[0] = ((Flags & 3) << 6) | ((Msg.size >> 4) & 0x3f);
-		header[1] = (Msg.size & 0xf);
-		if (Flags & 1) {
-			this.clientAck = (this.clientAck + 1) % (1 << 10);
-			header[1] |= (this.clientAck >> 2) & 0xf0;
-			header[2] = this.clientAck & 0xff;
-
-			this.sentChunkQueue.push(Buffer.concat([Buffer.from(header), Msg.buffer]));
-		}
-
-		let latestBuf = Buffer.from([0x0 + (((16 << 4) & 0xf0) | ((this.ack >> 8) & 0xf)), this.ack & 0xff, 0x1, header[0], header[1]]);
-		if (Flags & 1)
-			latestBuf = Buffer.concat([latestBuf, Buffer.from([this.clientAck])]);
-		latestBuf = Buffer.concat([latestBuf, Msg.buffer, this.TKEN]);
-		this.socket.send(latestBuf, 0, latestBuf.length, this.port, this.host);
-
-	}
-	SendMsgExWithChunks(Msgs: MsgPacker[], Flags: number) {
-		if (this.State == States.STATE_OFFLINE)
-			throw new Error("Client is not connected");
-		if (!this.socket)
-			return;
+		let _Msgs: MsgPacker[];
+		if (Msgs instanceof Array)
+			_Msgs = Msgs;
+		else
+			_Msgs = [Msgs];
 		this.lastSendTime = new Date().getTime();
 		var header: Buffer[] = [];
-
-		Msgs.forEach((Msg: MsgPacker, index) => {
+		_Msgs.forEach((Msg: MsgPacker, index) => {
 			header[index] = Buffer.alloc((Flags & 1 ? 3 : 2));
 			header[index][0] = ((Flags & 3) << 6) | ((Msg.size >> 4) & 0x3f);
 			header[index][1] = (Msg.size & 0xf);
@@ -342,19 +346,15 @@ class Client extends EventEmitter {
 				this.clientAck = (this.clientAck + 1) % (1 << 10);
 				header[index][1] |= (this.clientAck >> 2) & 0xf0;
 				header[index][2] = this.clientAck & 0xff;
-
 				header[index][0] = (((Flags | 2)&3)<<6)|((Msg.size>>4)&0x3f); // 2 is resend flag (ugly hack for queue)
 				
 				this.sentChunkQueue.push(Buffer.concat([header[index], Msg.buffer]));
-
 				header[index][0] = (((Flags)&3)<<6)|((Msg.size>>4)&0x3f);
-
-
 			}
 		})
-		var packetHeader = Buffer.from([0x0 + (((16 << 4) & 0xf0) | ((this.ack >> 8) & 0xf)), this.ack & 0xff, Msgs.length]);
+		var packetHeader = Buffer.from([0x0 + (((16 << 4) & 0xf0) | ((this.ack >> 8) & 0xf)), this.ack & 0xff, _Msgs.length]);
 		var chunks = Buffer.from([]);
-		Msgs.forEach((Msg: MsgPacker, index) => {
+		_Msgs.forEach((Msg: MsgPacker, index) => {
 			chunks = Buffer.concat([chunks, Buffer.from(header[index]), Msg.buffer]);
 		})
 		var packet = Buffer.concat([(packetHeader), chunks, this.TKEN]);
@@ -411,7 +411,7 @@ class Client extends EventEmitter {
 		let predTimer = setInterval(() => {
 			if (this.State == States.STATE_ONLINE) {
 				if (this.AckGameTick > 0)
-				this.PredGameTick++;
+					this.PredGameTick++;
 				// console.log(this.PredGameTick, this.AckGameTick)
 			} else if (this.State == States.STATE_OFFLINE) 
 				clearInterval(predTimer);
@@ -467,6 +467,8 @@ class Client extends EventEmitter {
 						this.TKEN = Buffer.from(a.toJSON().data.slice(a.toJSON().data.length - 4, a.toJSON().data.length))
 						this.SendControlMsg(3);
 						this.State = States.STATE_LOADING; // loading state
+						this.receivedSnaps = 0;
+						
 						var info = new MsgPacker(1, true);
 						info.AddString("0.6 626fce9a778df4d4");
 						info.AddString(""); // password
@@ -481,7 +483,7 @@ class Client extends EventEmitter {
 						client_version.AddInt(16003);
 						client_version.AddString("DDNet 16.0.3");
 		
-						this.SendMsgExWithChunks([client_version, info], 1)
+						this.SendMsgEx([client_version, info], 1)
 					} else if (a.toJSON().data[3] == 0x4) {
 						// disconnected
 						this.State = States.STATE_OFFLINE;
@@ -778,5 +780,6 @@ class Client extends EventEmitter {
 
 
 }
-export = Client;
+
+// export = Client;
 // module.exports = Client;
