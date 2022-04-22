@@ -172,6 +172,12 @@ declare interface iKillMsg {
 	special_mode: number
 }
 
+declare interface iOptions {
+	identity?: ClientInfo,
+	password?: string,
+	ddnet_version?: {version: number, release_version: string},
+}
+
 export declare interface Client {
 	host: string;
 	port: number;
@@ -199,6 +205,7 @@ export declare interface Client {
 
 	lastSendTime: number;
 
+	options?: iOptions;
 
 	on(event: 'connected', listener: () => void): this;
 	on(event: 'disconnect', listener: (reason: string) => void): this;
@@ -207,17 +214,23 @@ export declare interface Client {
 	on(event: 'kill', listener: (kill: iKillMsg) => void): this;
 
 }
+
+
+
 export class Client extends EventEmitter {
 
 
 
-	constructor(ip: string, port: number, nickname: string) {
+	constructor(ip: string, port: number, nickname: string, options?: iOptions) {
 		super();
 		this.host = ip;
 		this.port = port;
 		this.name = nickname;
 		this.AckGameTick = 0;
 		this.PredGameTick = 0;
+		
+		if (options) 			
+			this.options = options;
 
 		this.timer = 0;
 
@@ -471,7 +484,7 @@ export class Client extends EventEmitter {
 						
 						var info = new MsgPacker(1, true);
 						info.AddString("0.6 626fce9a778df4d4");
-						info.AddString(""); // password
+						info.AddString(this.options?.password === undefined ? "" : this.options?.password); // password
 
 						var client_version = new MsgPacker(0, true);
 						client_version.AddBuffer(Buffer.from("8c00130484613e478787f672b3835bd4", 'hex'));
@@ -480,8 +493,13 @@ export class Client extends EventEmitter {
 						randomBytes(16).copy(randomUuid);
 
 						client_version.AddBuffer(randomUuid);
-						client_version.AddInt(16003);
-						client_version.AddString("DDNet 16.0.3");
+						if (this.options?.ddnet_version !== undefined) {
+							client_version.AddInt(this.options?.ddnet_version.version);
+							client_version.AddString("DDNet " + this.options?.ddnet_version.release_version);
+						} else {
+							client_version.AddInt(16003);
+							client_version.AddString("DDNet 16.0.3");
+						}
 		
 						this.SendMsgEx([client_version, info], 1)
 					} else if (a.toJSON().data[3] == 0x4) {
@@ -618,13 +636,24 @@ export class Client extends EventEmitter {
 					this.SendMsgEx(Msg, 1);
 				} else if ((unpacked.chunks[0] && chunkMessages.includes("CON_READY") || unpacked.chunks[0] && chunkMessages.includes("SV_MOTD"))) {
 					var info = new MsgPacker(20, false);
-					info.AddString(this.name); /* name */
-					info.AddString(""); /* clan */
-					info.AddInt(-1); /* country */
-					info.AddString("greyfox"); /* skin */
-					info.AddInt(1); /* use custom color */
-					info.AddInt(10346103); /* color body */
-					info.AddInt(65535); /* color feet */
+					if (this.options?.identity) {
+						info.AddString(this.options.identity.name); 
+						info.AddString(this.options.identity.clan); 
+						info.AddInt(this.options.identity.country); 
+						info.AddString(this.options.identity.skin); 
+						info.AddInt(this.options.identity.use_custom_color);
+						info.AddInt(this.options.identity.color_body); 
+						info.AddInt(this.options.identity.color_feet); 
+					} else {
+						info.AddString(this.name); /* name */
+						info.AddString(""); /* clan */
+						info.AddInt(-1); /* country */
+						info.AddString("greyfox"); /* skin */
+						info.AddInt(1); /* use custom color */
+						info.AddInt(10346103); /* color body */
+						info.AddInt(65535); /* color feet */
+
+					}
 					this.SendMsgEx(info, 1);
 
 
