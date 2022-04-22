@@ -1,7 +1,7 @@
 import { MsgUnpacker } from "./MsgUnpacker";
 var decoder = new TextDecoder('utf-8');
 
-const itemAppendix: {"type_id": number, "size": number, "name": string}[] = [
+export const itemAppendix: {"type_id": number, "size": number, "name": string}[] = [
 	{"type_id": 0, "size": 0, "name": "obj_ex"},
 	{"type_id": 1, "size": 10, "name": "obj_player_input"},
 	{"type_id": 2, "size": 6, "name": "obj_projectile"},
@@ -24,7 +24,8 @@ const itemAppendix: {"type_id": number, "size": number, "name": string}[] = [
 	{"type_id": 19, "size": 3, "name": "event_sound_world"},
 	{"type_id": 20, "size": 3, "name": "event_damage_indicator"}
 ]
-enum items {
+
+export enum items {
 	OBJ_EX,
 	OBJ_PLAYER_INPUT,
 	OBJ_PROJECTILE,
@@ -47,9 +48,10 @@ enum items {
 	EVENT_SOUND_WORLD,
 	EVENT_DAMAGE_INDICATOR
 }
-type Item = PlayerInput | PlayerInfo | Projectile | Laser | Pickup | Flag | GameInfo | GameData | CharacterCore | Character | PlayerInfo | ClientInfo | SpectatorInfo | Common | Explosion | Spawn |HammerHit | Death | SoundGlobal | SoundWorld | DamageInd | DdnetCharacter;
 
-class Snapshot {
+export type Item = PlayerInput | PlayerInfo | Projectile | Laser | Pickup | Flag | GameInfo | GameData | CharacterCore | Character | PlayerInfo | ClientInfo | SpectatorInfo | Common | Explosion | Spawn |HammerHit | Death | SoundGlobal | SoundWorld | DamageInd | DdnetCharacter;
+
+export class Snapshot {
 	private IntsToStr(pInts: number[]): string {
 		var pIntz: number[] = [];
 		var pStr = ''
@@ -352,4 +354,4 @@ class Snapshot {
 		return items;
 	}}
 // module.exports = MsgPacker;
-export {Snapshot};
+// export {Snapshot};

@@ -1,15 +1,13 @@
 import { randomBytes } from "crypto";
 
 import net from 'dgram';
-import fs, { stat } from 'fs';
 import { EventEmitter } from 'stream';
-import { spawn } from 'child_process';
 
 import { unpackInt, unpackString, MsgUnpacker } from "./MsgUnpacker";
 
 import Movement from './movement';
 
-import MsgPacker from './MsgPacker';
+import { MsgPacker } from './MsgPacker';
 import { Snapshot } from './snapshot';
 import Huffman from "./huffman";
 
@@ -365,7 +363,7 @@ class Client extends EventEmitter {
 	}
 	SendMsgRaw(chunks: Buffer[]) {
 		if (this.State == States.STATE_OFFLINE)
-			throw new Error("Client is not connected");
+			return console.log(chunks, "client not connected"); //throw new Error("Client is not connected");
 		if (!this.socket)
 			return;
 
@@ -411,10 +409,13 @@ class Client extends EventEmitter {
 		this.State = States.STATE_CONNECTING;
 
 		let predTimer = setInterval(() => {
-			if (this.State == States.STATE_ONLINE && this.AckGameTick > 0) {
+			if (this.State == States.STATE_ONLINE) {
+				if (this.AckGameTick > 0)
 				this.PredGameTick++;
 				// console.log(this.PredGameTick, this.AckGameTick)
-			}
+			} else if (this.State == States.STATE_OFFLINE) 
+				clearInterval(predTimer);
+			
 		}, 20);
 
 		this.SendControlMsg(1, "TKEN")
@@ -425,8 +426,10 @@ class Client extends EventEmitter {
 				clearInterval(connectInterval)
 		}, 500);
 
-		setInterval(() => {
+		let inputInterval = setInterval(() => {
 			// if (new Date().getTime() - this.time >= 1000) {
+			if (this.State == States.STATE_OFFLINE)
+				clearInterval(inputInterval)
 			if (this.State != States.STATE_ONLINE)
 				return;
 			this.time = new Date().getTime();
@@ -440,12 +443,13 @@ class Client extends EventEmitter {
 			// this.sentChunkQueue.forEach((chunk) => {
 			// if (this.State == 0) // disconnected
 				// return;
-			if (this.State != 0) {
-				if (((new Date().getTime()) - this.lastSendTime) > 900) {
+			if (this.State != States.STATE_OFFLINE) {
+				if (((new Date().getTime()) - this.lastSendTime) > 900 && this.sentChunkQueue.length > 0) {
 					this.SendMsgRaw([this.sentChunkQueue[0]]);
-					console.log(this.sentChunkQueue);
+					console.log(this.sentChunkQueue, this.State);
 				}
-			}
+			} else
+				clearInterval(resendTimeout)
 			// })
 		}, 1000)
 	
@@ -453,7 +457,9 @@ class Client extends EventEmitter {
 		this.time = new Date().getTime() + 2000; // start sending keepalives after 2s
 
 		if (this.socket)
-			this.socket.on("message", (a) => {
+			this.socket.on("message", (a, rinfo) => {
+				if (this.State == 0 || rinfo.address != this.host || rinfo.port != this.port)
+					return;
 				clearInterval(connectInterval)
 				if (a.toJSON().data[0] == 0x10) {
 					if (a.toString().includes("TKEN") || a.toJSON().data[3] == 0x2) {

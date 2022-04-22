@@ -1,4 +1,4 @@
-var decoder = new TextDecoder('utf-8');
+const decoder = new TextDecoder('utf-8');
 export function unpackInt(pSrc: number[]): {result: number, remaining: number[]} {
 	var result = 0;
 	// var len = 1;

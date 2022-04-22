@@ -1,4 +1,4 @@
-class MsgPacker {
+export class MsgPacker {
 	result: Buffer;
 	sys: boolean;
 	constructor(msg: number, sys: boolean) {
@@ -44,4 +44,4 @@ class MsgPacker {
 	}
 }
 // module.exports = MsgPacker;
-export = MsgPacker;
+// export = MsgPacker;

@@ -1,6 +1,6 @@
 {
 	"name": "teeworlds",
-	"version": "2.1.5",
+	"version": "2.1.6",
 	"description": "Library for (ingame) teeworlds bots.",
 	"license": "MIT",
 	"main": "index.js",
