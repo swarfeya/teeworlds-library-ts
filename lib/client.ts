@@ -268,10 +268,10 @@ export class Client extends EventEmitter {
 			if (packet.length == 1 && packet[0] == -1)
 				return unpacked
 		}
-		// return unpacked;
+
 		for (let i = 0; i < unpacked.twprotocol.chunkAmount; i++) {
 			var chunk: chunk = {} as chunk;
-			chunk.bytes = ((packet[0] & 0x3f) << 4) | (packet[1] & ((1 << 4) - 1)); // idk what this shit is but it works
+			chunk.bytes = ((packet[0] & 0x3f) << 4) | (packet[1] & ((1 << 4) - 1));
 			chunk.flags = (packet[0] >> 6) & 3;
 			chunk.sequence = -1;
 
@@ -287,12 +287,11 @@ export class Client extends EventEmitter {
 			Object.values(messageUUIDs).forEach((a, i) => {
 				if (a.compare(packet.slice(0, 16)) == 0) {
 					chunk.extended_msgid = a;
-					// chunk.type = 'sys';
 					chunk.msg = Object.keys(messageUUIDs)[i];
 				}
 			})
 
-			packet = packet.slice(chunk.bytes) // +1 cuz it adds an extra \x00 for easier parsing i guess
+			packet = packet.slice(chunk.bytes) 
 			unpacked.chunks.push(chunk)
 		}
 		return unpacked
@@ -315,33 +314,10 @@ export class Client extends EventEmitter {
 		*/
 		})
 	}
-	// SendMsgEx(Msg: MsgPacker, Flags: number) {
-	// 	if (this.State == States.STATE_OFFLINE)
-	// 		throw new Error("Client is not connected");
-	// 	if (!this.socket)
-	// 		return;
-	// 	this.lastSendTime = new Date().getTime();
-	// 	var header = []
-	// 	header[0] = ((Flags & 3) << 6) | ((Msg.size >> 4) & 0x3f);
-	// 	header[1] = (Msg.size & 0xf);
-	// 	if (Flags & 1) {
-	// 		this.clientAck = (this.clientAck + 1) % (1 << 10);
-	// 		header[1] |= (this.clientAck >> 2) & 0xf0;
-	// 		header[2] = this.clientAck & 0xff;
 
-	// 		this.sentChunkQueue.push(Buffer.concat([Buffer.from(header), Msg.buffer]));
-	// 	}
-
-	// 	let latestBuf = Buffer.from([0x0 + (((16 << 4) & 0xf0) | ((this.ack >> 8) & 0xf)), this.ack & 0xff, 0x1, header[0], header[1]]);
-	// 	if (Flags & 1)
-	// 		latestBuf = Buffer.concat([latestBuf, Buffer.from([this.clientAck])]);
-	// 	latestBuf = Buffer.concat([latestBuf, Msg.buffer, this.TKEN]);
-	// 	this.socket.send(latestBuf, 0, latestBuf.length, this.port, this.host);
-
-	// }
 	SendMsgEx(Msgs: MsgPacker[] | MsgPacker, Flags: number) {
 		if (this.State == States.STATE_OFFLINE)
-			return; //throw new Error("Client is not connected");
+			return; 
 		if (!this.socket)
 			return;
 		let _Msgs: MsgPacker[];
@@ -376,7 +352,7 @@ export class Client extends EventEmitter {
 	}
 	SendMsgRaw(chunks: Buffer[]) {
 		if (this.State == States.STATE_OFFLINE)
-			return console.log(chunks, "client not connected"); //throw new Error("Client is not connected");
+			return;
 		if (!this.socket)
 			return;
 
@@ -391,7 +367,6 @@ export class Client extends EventEmitter {
 
 	MsgToChunk(packet: Buffer) {
 		var chunk: chunk = {} as chunk;
-		// let packet = Msg.buffer;
 		chunk.bytes = ((packet[0] & 0x3f) << 4) | (packet[1] & ((1 << 4) - 1));
 		chunk.flags = (packet[0] >> 6) & 3;
 		chunk.sequence = -1;
@@ -404,13 +379,10 @@ export class Client extends EventEmitter {
 		chunk.type = packet[0] & 1 ? "sys" : "game"; // & 1 = binary, ****_***1. e.g 0001_0111 sys, 0001_0110 game
 		chunk.msgid = (packet[0]-(packet[0]&1))/2;
 		chunk.msg = messageTypes[packet[0]&1][chunk.msgid];
-		// if (chunk.msg == undefined)
-			// console.log(packet)
 		chunk.raw = packet.slice(1, chunk.bytes)
 		Object.values(messageUUIDs).forEach((a, i) => {
 			if (a.compare(packet.slice(0, 16)) === 0) {
 				chunk.extended_msgid = a;
-				// chunk.type = 'sys';
 				chunk.msg = Object.keys(messageUUIDs)[i];
 			}
 		})
@@ -425,7 +397,6 @@ export class Client extends EventEmitter {
 			if (this.State == States.STATE_ONLINE) {
 				if (this.AckGameTick > 0)
 					this.PredGameTick++;
-				// console.log(this.PredGameTick, this.AckGameTick)
 			} else if (this.State == States.STATE_OFFLINE) 
 				clearInterval(predTimer);
 			
@@ -440,30 +411,21 @@ export class Client extends EventEmitter {
 		}, 500);
 
 		let inputInterval = setInterval(() => {
-			// if (new Date().getTime() - this.time >= 1000) {
 			if (this.State == States.STATE_OFFLINE)
 				clearInterval(inputInterval)
 			if (this.State != States.STATE_ONLINE)
 				return;
 			this.time = new Date().getTime();
-			// this.SendControlMsg(0);
-			// console.log("sending with " + this.AckGameTick)
 			this.sendInput();
-			// }
 		}, 500)
 
 		let resendTimeout = setInterval(() => {
-			// this.sentChunkQueue.forEach((chunk) => {
-			// if (this.State == 0) // disconnected
-				// return;
 			if (this.State != States.STATE_OFFLINE) {
 				if (((new Date().getTime()) - this.lastSendTime) > 900 && this.sentChunkQueue.length > 0) {
 					this.SendMsgRaw([this.sentChunkQueue[0]]);
-					console.log(this.sentChunkQueue, this.State);
 				}
 			} else
 				clearInterval(resendTimeout)
-			// })
 		}, 1000)
 	
 
@@ -506,7 +468,6 @@ export class Client extends EventEmitter {
 						// disconnected
 						this.State = States.STATE_OFFLINE;
 						let reason: string = (unpackString(a.toJSON().data.slice(4)).result);
-						// this.State = -1;
 						this.emit("disconnect", reason);
 					}
 
@@ -517,8 +478,6 @@ export class Client extends EventEmitter {
 					if (a.flags & 1) { // vital
 						if (a.seq != undefined && a.seq != -1)
 							this.ack = a.seq
-						else
-							console.log("no seq", a)
 					}
 				})
 				this.sentChunkQueue.forEach((buff, i) => {
@@ -526,26 +485,20 @@ export class Client extends EventEmitter {
 					if (chunk.flags & 1) {
 						if (chunk.seq && chunk.seq < this.ack) {
 							this.sentChunkQueue.splice(i, 1);
-							// this.ack = (this.ack + 1) % (1 << 10);
 						} 
 					} 
 				})
 				var snapChunks = unpacked.chunks.filter(a => a.msg === "SNAP" || a.msg === "SNAP_SINGLE" || a.msg === "SNAP_EMPTY");
-				// console.log(unpacked.chunks.length, unpacked)
 				if (snapChunks.length > 0) {
 					let part = 0;
 					let num_parts = 1;
 					snapChunks.forEach(chunk => {
 						let AckGameTick = (unpackInt(chunk.raw.toJSON().data).result);
-						// setImmediate(() => {
-						// console.log(AckGameTick, this.AckGameTick, chunk.msg)
 						if (AckGameTick > this.AckGameTick) {
 							this.AckGameTick = AckGameTick;
 							if (Math.abs(this.PredGameTick - this.AckGameTick) > 10)
 								this.PredGameTick = AckGameTick + 1;
-							// console.log(this.AckGameTick)
 						}
-						// })
 
 						chunk.raw = Buffer.from(unpackInt(chunk?.raw?.toJSON().data).remaining);
 						let DeltaTick = unpackInt(chunk?.raw?.toJSON().data).result
@@ -564,25 +517,15 @@ export class Client extends EventEmitter {
 						}
 						chunk.raw = Buffer.from(unpackInt(chunk?.raw?.toJSON().data).remaining); // crc
 						this.snaps.push(chunk.raw)
-						// console.log(this.PredGameTick - this.AckGameTick, this.PredGameTick, this.AckGameTick)
 
 						if ((num_parts - 1) === part && this.snaps.length === num_parts) {
 							let mergedSnaps = Buffer.concat(this.snaps);
 							let snapUnpacked = SnapUnpacker.unpackSnapshot(mergedSnaps.toJSON().data, 1)
-							// console.log(snapUnpacked)
 
 							snapUnpacked.items.forEach((a, i) => {
 								if (a.type_id === items.OBJ_CLIENT_INFO) {
-									// console.log(a.parsed, i)
 									this.client_infos[a.id] = a.parsed as ClientInfo;
-									if ((a.parsed as ClientInfo).name.includes("������")) {
-										console.log(this.PredGameTick, this.AckGameTick, mergedSnaps.toJSON().data.toString())
-									}
-									console.log(this.client_infos[a.id].name, this.client_infos[a.id].clan, [a.id])
 								}
-								//   else if (a.type_id === items.OBJ_PLAYER_INFO) {
-								// this.player_infos[a.id] = a.parsed as PlayerInfo;
-								// }
 							})
 						}
 
@@ -602,7 +545,6 @@ export class Client extends EventEmitter {
 							unpacked.message = unpackString(remaining).result;
 							if (unpacked.client_id != -1)
 								unpacked.author = { ClientInfo: this.client_infos[unpacked.client_id], PlayerInfo: this.player_infos[unpacked.client_id] }
-							// console.log(unpacked)
 							this.emit("message", unpacked)
 						}
 					})
@@ -621,7 +563,6 @@ export class Client extends EventEmitter {
 								unpacked.victim = { ClientInfo: this.client_infos[unpacked.victim_id], PlayerInfo: this.player_infos[unpacked.victim_id] }
 							if (unpacked.killer_id != -1)
 								unpacked.killer = { ClientInfo: this.client_infos[unpacked.killer_id], PlayerInfo: this.player_infos[unpacked.killer_id] }
-							// console.log(unpacked)
 							this.emit("kill", unpacked)
 						}
 					})
@@ -699,16 +640,9 @@ export class Client extends EventEmitter {
 								snapUnpacked.items.forEach((a, i) => {
 									if (a.type_id == items.OBJ_CLIENT_INFO) {
 										this.client_infos[a.id] = a.parsed as ClientInfo;
-										// console.log(a.parsed, i)
-										// console.log(this.client_infos[a.id])
 									} else if (a.type_id == items.OBJ_PLAYER_INFO) {
 										this.player_infos[i] = a.parsed as PlayerInfo;
-									} else if (a.type_id == items.OBJ_EX || a.type_id > 0x4000) {
-										if (a.data.length == 5 && ((a.parsed as DdnetCharacter).freeze_end > 0 || (a.parsed as DdnetCharacter).freeze_end == -1)) {
-											// var packer = new MsgPacker(22, false)
-											// this.SendMsgEx(packer, 1)
-										}
-									}
+									} 
 								})
 							}
 
@@ -731,9 +665,6 @@ export class Client extends EventEmitter {
 		inputMsg.AddInt(this.AckGameTick);
 		inputMsg.AddInt(this.PredGameTick);
 		inputMsg.AddInt(40);
-		// let playerflags = 2;
-		// playerflags |= 8; // scoreboard
-		// playerflags |= 16; // aimline
 
 		let input_data = [
 
@@ -748,7 +679,6 @@ export class Client extends EventEmitter {
 			input.m_NextWeapon,
 			input.m_PrevWeapon
 		]
-		// console.log(this.player_infos, this.client_infos)
 		input_data.forEach(a => {
 			inputMsg.AddInt(a);
 		});
@@ -809,6 +739,3 @@ export class Client extends EventEmitter {
 
 
 }
-
-// export = Client;
-// module.exports = Client;

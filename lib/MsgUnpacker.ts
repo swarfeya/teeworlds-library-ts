@@ -1,7 +1,6 @@
 const decoder = new TextDecoder('utf-8');
 export function unpackInt(pSrc: number[]): {result: number, remaining: number[]} {
 	var result = 0;
-	// var len = 1;
 	
 	var iter = pSrc[Symbol.iterator]()
 	var src: any = iter.next()
@@ -16,7 +15,6 @@ export function unpackInt(pSrc: number[]): {result: number, remaining: number[]}
 		src = iter.next()
 
 		src = src.value;
-		// len++;
 		result |= ((src & 0b0111_1111)) << (6+7*i)
 		
 	}
@@ -55,6 +53,3 @@ export class MsgUnpacker {
 		return unpacked.result;
 	}
 }
-
-
-// export = {MsgUnpacker, unpackInt, unpackString}

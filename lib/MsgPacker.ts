@@ -2,7 +2,7 @@ export class MsgPacker {
 	result: Buffer;
 	sys: boolean;
 	constructor(msg: number, sys: boolean) {
-		this.result = Buffer.from([2*msg + (sys ? 1 : 0)]) // booleans turn into int automatically. 
+		this.result = Buffer.from([2*msg + (sys ? 1 : 0)]);
 		this.sys = sys;
 	}
 	AddString(str: string) {
@@ -32,8 +32,6 @@ export class MsgPacker {
 		} else
 			result.push(pDst)
 
-			// ... i'll just stop trying to understand.
-		
 		this.result = Buffer.concat([this.result, Buffer.from(result)]) 
 	}
 	get size() {
@@ -43,5 +41,3 @@ export class MsgPacker {
 		return this.result
 	}
 }
-// module.exports = MsgPacker;
-// export = MsgPacker;

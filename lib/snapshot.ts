@@ -67,7 +67,8 @@ export class Snapshot {
 		}
 		pIntz.splice(-1, 1)
 		pStr = decoder.decode(new Uint8Array(pIntz));
-		pStr = pStr.replace(/\x00|\u0000/g, "");//.replace(/ﾀ/g, "")
+
+    	pStr = pStr.replace(/\0.*/g, ''); // Remove content from first null char to end.
 		return pStr;
 	}
 	private parseItem(data: number[], Type: number): Item {
@@ -290,10 +291,8 @@ export class Snapshot {
 		return _item;
 	}
 	unpackSnapshot(snap: number[], lost = 0) { 
-		// var size = unpackInt(snap).result;
 		let unpacker = new MsgUnpacker(snap);
 
-		// snap = unpackInt(snap).remaining; // size
 		
 		/* key = (((type_id) << 16) | (id))
 		* key_to_id = ((key) & 0xffff)
@@ -302,9 +301,6 @@ export class Snapshot {
 		* https://github.com/heinrich5991/libtw2/blob/master/doc/snapshot.md
 		*/ 
 	
-		// snap = unpackInt(snap).remaining;
-		// console.log(unpackInt(snap).result, "tick?") // key?
-		// snap = unpackInt(snap).remaining;
 		let num_removed_items = unpacker.unpackInt();
 		let num_item_deltas = unpacker.unpackInt();
 		unpacker.unpackInt(); // _zero padding
@@ -342,16 +338,12 @@ export class Snapshot {
 				if (unpacker.remaining.length > 0) 
 					data.push(unpacker.unpackInt());
 			}
-			// console.log(type_id, id, _size, data);
+
 			let parsed = this.parseItem(data, type_id)
 			
-			// console.log(data)
-			// console.log('')
 			items.items.push({data, parsed, type_id, id, key})
 		}
 
 		
 		return items;
 	}}
-// module.exports = MsgPacker;
-// export {Snapshot};
