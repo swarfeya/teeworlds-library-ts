@@ -3,7 +3,7 @@ import { randomBytes } from "crypto";
 import net from 'dgram';
 import { EventEmitter } from 'stream';
 
-import { unpackInt, unpackString, MsgUnpacker } from "./MsgUnpacker";
+import { unpackString, MsgUnpacker } from "./MsgUnpacker";
 
 import Movement from './movement';
 
@@ -493,38 +493,51 @@ export class Client extends EventEmitter {
 					let part = 0;
 					let num_parts = 1;
 					snapChunks.forEach(chunk => {
-						let AckGameTick = (unpackInt(chunk.raw.toJSON().data).result);
+						let unpacker = new MsgUnpacker(chunk.raw.toJSON().data);
+			
+						let AckGameTick = unpacker.unpackInt();
 						if (AckGameTick > this.AckGameTick) {
 							this.AckGameTick = AckGameTick;
 							if (Math.abs(this.PredGameTick - this.AckGameTick) > 10)
 								this.PredGameTick = AckGameTick + 1;
 						}
 
-						chunk.raw = Buffer.from(unpackInt(chunk?.raw?.toJSON().data).remaining);
-						let DeltaTick = unpackInt(chunk?.raw?.toJSON().data).result
+						// chunk.raw = Buffer.from(unpackInt(chunk?.raw?.toJSON().data).remaining);
+						let DeltaTick = AckGameTick - unpacker.unpackInt();
+						let num_parts = 1;
+						let part = 0;
+
 						if (chunk.msg === "SNAP") {
-							chunk.raw = Buffer.from(unpackInt(chunk?.raw?.toJSON().data).remaining); // delta tick
-							num_parts = (unpackInt(chunk?.raw?.toJSON().data).result)
-							chunk.raw = Buffer.from(unpackInt(chunk?.raw?.toJSON().data).remaining); // num parts
-							part = (unpackInt(chunk?.raw?.toJSON().data).result)
+							// chunk.raw = Buffer.from(unpackInt(chunk?.raw?.toJSON().data).remaining); // delta tick
+							num_parts = unpacker.unpackInt();
+							// chunk.raw = Buffer.from(unpackInt(chunk?.raw?.toJSON().data).remaining); // num parts
+							part = unpacker.unpackInt();
 						}
-						chunk.raw = Buffer.from(unpackInt(chunk?.raw?.toJSON().data).remaining); // part
-						if (chunk.msg != "SNAP_EMPTY")
-							chunk.raw = Buffer.from(unpackInt(chunk?.raw?.toJSON().data).remaining); // crc
-						chunk.raw = Buffer.from(unpackInt(chunk?.raw?.toJSON().data).remaining); // crc
+						
+						let crc = 0;
+						let part_size = 0;
+						if (chunk.msg != "SNAP_EMPTY") {
+							crc = unpacker.unpackInt(); // crc
+							part_size = unpacker.unpackInt();
+						}
 						if (part === 0 || this.snaps.length > 30) {
 							this.snaps = [];
 						}
-						chunk.raw = Buffer.from(unpackInt(chunk?.raw?.toJSON().data).remaining); // crc
+						chunk.raw = Buffer.from(unpacker.remaining);
 						this.snaps.push(chunk.raw)
 
 						if ((num_parts - 1) === part && this.snaps.length === num_parts) {
 							let mergedSnaps = Buffer.concat(this.snaps);
+							// mergedSnaps = Buffer.from(unpackInt(mergedSnaps.toJSON().data).remaining);
 							let snapUnpacked = SnapUnpacker.unpackSnapshot(mergedSnaps.toJSON().data, 1)
-
+							// console.log(snapUnpacked.items, toHexStream(mergedSnaps));
 							snapUnpacked.items.forEach((a, i) => {
 								if (a.type_id === items.OBJ_CLIENT_INFO) {
 									this.client_infos[a.id] = a.parsed as ClientInfo;
+									if (this.client_infos[a.id].name.includes("�") || this.client_infos[a.id].clan.includes("�")) {
+										console.log("bad name", this.client_infos[a.id], toHexStream(mergedSnaps), chunk, AckGameTick, DeltaTick, crc, part_size);
+									}
+									console.log(this.client_infos[a.id])
 								}
 							})
 						}
@@ -537,14 +550,18 @@ export class Client extends EventEmitter {
 					var chat = unpacked.chunks.filter(a => a.msg == "SV_CHAT");
 					chat.forEach(a => {
 						if (a.msg == "SV_CHAT") {
-							var unpacked: iMessage = {} as iMessage;
-							unpacked.team = unpackInt(a.raw.toJSON().data).result;
-							var remaining: number[] = unpackInt(a.raw.toJSON().data).remaining;
-							unpacked.client_id = unpackInt(remaining).result;
-							remaining = unpackInt(remaining).remaining;
-							unpacked.message = unpackString(remaining).result;
+							let unpacker = new MsgUnpacker(a.raw.toJSON().data);
+							var unpacked: iMessage = {
+								team: unpacker.unpackInt(),
+								client_id: unpacker.unpackInt(),
+								message: unpacker.unpackString()
+							} as iMessage;
+
 							if (unpacked.client_id != -1)
-								unpacked.author = { ClientInfo: this.client_infos[unpacked.client_id], PlayerInfo: this.player_infos[unpacked.client_id] }
+								unpacked.author = { 
+									ClientInfo: this.client_infos[unpacked.client_id], 
+									PlayerInfo: this.player_infos[unpacked.client_id] 
+								}
 							this.emit("message", unpacked)
 						}
 					})
@@ -608,45 +625,6 @@ export class Client extends EventEmitter {
 						if (this.State != States.STATE_ONLINE)
 							this.emit('connected')
 						this.State = States.STATE_ONLINE;
-					}
-
-					var chunks = unpacked.chunks.filter(a => a.msg == "SNAP" || a.msg == "SNAP_SINGLE" || a.msg == "SNAP_EMPTY");
-					if (chunks.length > 0) {
-						let part = 0;
-						let num_parts = 1;
-						chunks.forEach(chunk => {
-							let AckGameTick = (unpackInt(chunk.raw.toJSON().data).result);
-							chunk.raw = Buffer.from(unpackInt(chunk?.raw?.toJSON().data).remaining);
-							let DeltaTick = unpackInt(chunk?.raw?.toJSON().data).result
-							if (chunk.msg == "SNAP") {
-								chunk.raw = Buffer.from(unpackInt(chunk?.raw?.toJSON().data).remaining); // delta tick
-								num_parts = (unpackInt(chunk?.raw?.toJSON().data).result)
-								chunk.raw = Buffer.from(unpackInt(chunk?.raw?.toJSON().data).remaining); // num parts
-								part = (unpackInt(chunk?.raw?.toJSON().data).result)
-							}
-							chunk.raw = Buffer.from(unpackInt(chunk?.raw?.toJSON().data).remaining); // part
-							if (chunk.msg != "SNAP_EMPTY")
-								chunk.raw = Buffer.from(unpackInt(chunk?.raw?.toJSON().data).remaining); // crc
-							chunk.raw = Buffer.from(unpackInt(chunk?.raw?.toJSON().data).remaining); // crc
-							if (part == 0 || this.snaps.length > 30) {
-								this.snaps = [];
-							}
-							this.snaps.push(chunk.raw)
-
-							if ((num_parts - 1) == part && this.snaps.length == num_parts) {
-								let mergedSnaps = Buffer.concat(this.snaps);
-								let snapUnpacked = SnapUnpacker.unpackSnapshot(mergedSnaps.toJSON().data, 1)
-
-								snapUnpacked.items.forEach((a, i) => {
-									if (a.type_id == items.OBJ_CLIENT_INFO) {
-										this.client_infos[a.id] = a.parsed as ClientInfo;
-									} else if (a.type_id == items.OBJ_PLAYER_INFO) {
-										this.player_infos[i] = a.parsed as PlayerInfo;
-									} 
-								})
-							}
-
-						})
 					}
 
 				}
