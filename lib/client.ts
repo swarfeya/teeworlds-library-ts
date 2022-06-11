@@ -790,7 +790,7 @@ export class Client extends EventEmitter {
 	}
 	player_info(id: number) {
 		let delta = this.SnapUnpacker.deltas.filter(a => 
-			a.type_id == 11 
+			a.type_id == 10
 			&& a.id == id
 		);
 
@@ -799,7 +799,7 @@ export class Client extends EventEmitter {
 		return delta[0].parsed as PlayerInfo;
 	}
 	get player_infos(): PlayerInfo[] {
-		return this.SnapUnpacker.deltas.filter(a => a.type_id == 11)
+		return this.SnapUnpacker.deltas.filter(a => a.type_id == 10)
 			.sort((a, b) => a.id - b.id)
 			.map(a => a.parsed as PlayerInfo);
 	}
