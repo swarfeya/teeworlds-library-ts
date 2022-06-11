@@ -12,7 +12,6 @@ import { Snapshot } from './snapshot';
 import Huffman from "./huffman";
 
 const huff = new Huffman();
-const SnapUnpacker = new Snapshot();
 
 enum States {
 	STATE_OFFLINE = 0,
@@ -24,18 +23,6 @@ enum States {
 	STATE_RESTARTING
 }
 
-interface NetObj_PlayerInput {
-	m_Direction: number,
-	m_TargetX: number,
-	m_TargetY: number,
-	m_Jump: number,
-	m_Fire: number,
-	m_Hook: number,
-	m_PlayerFlags: number,
-	m_WantedWeapon: number,
-	m_NextWeapon: number,
-	m_PrevWeapon: number
-};
 
 enum NETMSGTYPE {
 	EX,
@@ -73,29 +60,6 @@ enum NETMSGTYPE {
 	NUM
 }
 
-enum items {
-	OBJ_EX,
-	OBJ_PLAYER_INPUT,
-	OBJ_PROJECTILE,
-	OBJ_LASER,
-	OBJ_PICKUP,
-	OBJ_FLAG,
-	OBJ_GAME_INFO,
-	OBJ_GAME_DATA,
-	OBJ_CHARACTER_CORE,
-	OBJ_CHARACTER,
-	OBJ_PLAYER_INFO,
-	OBJ_CLIENT_INFO,
-	OBJ_SPECTATOR_INFO,
-	EVENT_COMMON,
-	EVENT_EXPLOSION,
-	EVENT_SPAWN,
-	EVENT_HAMMERHIT,
-	EVENT_DEATH,
-	EVENT_SOUND_GLOBAL,
-	EVENT_SOUND_WORLD,
-	EVENT_DAMAGE_INDICATOR
-}
 interface chunk {
 	bytes: number,
 	flags: number,
@@ -159,15 +123,15 @@ declare interface ClientInfo {
 declare interface iMessage {
 	team: number,
 	client_id: number,
-	author?: { ClientInfo: ClientInfo, PlayerInfo: PlayerInfo },
+	author?: { ClientInfo?: ClientInfo, PlayerInfo?: PlayerInfo },
 	message: string
 }
 
 declare interface iKillMsg {
 	killer_id: number,
-	killer?: { ClientInfo: ClientInfo, PlayerInfo: PlayerInfo },
+	killer?: { ClientInfo?: ClientInfo, PlayerInfo?: PlayerInfo },
 	victim_id: number,
-	victim?: { ClientInfo: ClientInfo, PlayerInfo: PlayerInfo },
+	victim?: { ClientInfo?: ClientInfo, PlayerInfo?: PlayerInfo },
 	weapon: number,
 	special_mode: number
 }
@@ -176,6 +140,8 @@ declare interface iOptions {
 	identity?: ClientInfo,
 	password?: string,
 	ddnet_version?: {version: number, release_version: string},
+	timeout?: number, // in ms
+	NET_VERSION?: string
 }
 
 export declare interface Client {
@@ -190,6 +156,7 @@ export declare interface Client {
 	socket: net.Socket | undefined;
 	TKEN: Buffer;
 	time: number;
+	SnapUnpacker: Snapshot;
 
 	timer: number;
 	PredGameTick: number;
@@ -198,12 +165,16 @@ export declare interface Client {
 	movement: Movement;
 
 	snaps: Buffer[];
-	client_infos: ClientInfo[];
-	player_infos: PlayerInfo[];
 
 	sentChunkQueue: Buffer[];
-
+	queueChunkEx: MsgPacker[];
 	lastSendTime: number;
+	lastRecvTime: number;
+
+	lastSentMessages: {msg: MsgPacker, ack: number}[];
+
+	// eSnapHolder: eSnap[];
+
 
 	options?: iOptions;
 
@@ -212,7 +183,7 @@ export declare interface Client {
 
 	on(event: 'message', listener: (message: iMessage) => void): this;
 	on(event: 'kill', listener: (kill: iKillMsg) => void): this;
-
+	requestResend: boolean;
 }
 
 
@@ -228,6 +199,9 @@ export class Client extends EventEmitter {
 		this.name = nickname;
 		this.AckGameTick = 0;
 		this.PredGameTick = 0;
+		this.SnapUnpacker = new Snapshot();
+		// this.eSnapHolder = [];
+		this.requestResend = false;
 		
 		if (options) 			
 			this.options = options;
@@ -237,10 +211,9 @@ export class Client extends EventEmitter {
 		this.movement = new Movement();
 
 		this.snaps = [];
-		this.client_infos = [];
-		this.player_infos = [];
 
 		this.sentChunkQueue = [];
+		this.queueChunkEx = [];
 
 		this.State = States.STATE_OFFLINE; // 0 = offline; 1 = STATE_CONNECTING = 1, STATE_LOADING = 2, STATE_ONLINE = 3
 		this.ack = 0; // ack of messages the client has received
@@ -252,22 +225,40 @@ export class Client extends EventEmitter {
 
 		this.TKEN = Buffer.from([255, 255, 255, 255])
 		this.time = new Date().getTime() + 2000; // time (used for keepalives, start to send keepalives after 2 seconds)
-
 		this.lastSendTime = new Date().getTime();
+		this.lastRecvTime = new Date().getTime();
+
+		this.lastSentMessages = [];
 
 	}
+
+	ResendAfter(lastAck: number) {
+		this.clientAck = lastAck;
+		let toResend: MsgPacker[] = [];
+		this.lastSentMessages.forEach(msg => {
+			if (msg.ack > lastAck)
+				toResend.push(msg.msg);
+		});
+		this.SendMsgEx(toResend, 1|2);
+	}
+
 	Unpack(packet: Buffer): _packet {
-		var unpacked: _packet = { twprotocol: { flags: packet[0], ack: packet[1], chunkAmount: packet[2], size: packet.byteLength - 3 }, chunks: [] }
+		var unpacked: _packet = { twprotocol: { flags: packet[0] >> 4, ack: ((packet[0]&0xf)<<8) | packet[1], chunkAmount: packet[2], size: packet.byteLength - 3 }, chunks: [] }
 
 
 		if (packet.indexOf(Buffer.from([0xff, 0xff, 0xff, 0xff])) == 0 && !(unpacked.twprotocol.flags & 8) || unpacked.twprotocol.flags == 255) // flags == 255 is connectionless (used for sending usernames)
 			return unpacked;
+		if (unpacked.twprotocol.flags & 4) { // resend flag
+			this.ResendAfter(unpacked.twprotocol.ack);
+		}
 		packet = packet.slice(3)
-		if (unpacked.twprotocol.flags & 128) {
+		
+		if (unpacked.twprotocol.flags & 8 && !(unpacked.twprotocol.flags & 1)) { // compression flag
 			packet = huff.decompress(packet)
 			if (packet.length == 1 && packet[0] == -1)
 				return unpacked
-		}
+		} 
+
 
 		for (let i = 0; i < unpacked.twprotocol.chunkAmount; i++) {
 			var chunk: chunk = {} as chunk;
@@ -325,31 +316,58 @@ export class Client extends EventEmitter {
 			_Msgs = Msgs;
 		else
 			_Msgs = [Msgs];
+		if (this.queueChunkEx.length > 0) {
+			_Msgs.push(...this.queueChunkEx);
+			this.queueChunkEx = [];
+		}
 		this.lastSendTime = new Date().getTime();
 		var header: Buffer[] = [];
+		if (this.clientAck == 0)
+			this.lastSentMessages = [];
 		_Msgs.forEach((Msg: MsgPacker, index) => {
 			header[index] = Buffer.alloc((Flags & 1 ? 3 : 2));
 			header[index][0] = ((Flags & 3) << 6) | ((Msg.size >> 4) & 0x3f);
 			header[index][1] = (Msg.size & 0xf);
 			if (Flags & 1) {
 				this.clientAck = (this.clientAck + 1) % (1 << 10);
+				if (this.clientAck == 0)
+					this.lastSentMessages = [];
 				header[index][1] |= (this.clientAck >> 2) & 0xf0;
 				header[index][2] = this.clientAck & 0xff;
 				header[index][0] = (((Flags | 2)&3)<<6)|((Msg.size>>4)&0x3f); // 2 is resend flag (ugly hack for queue)
-				
-				this.sentChunkQueue.push(Buffer.concat([header[index], Msg.buffer]));
+				if ((Flags & 2) == 0)
+					this.sentChunkQueue.push(Buffer.concat([header[index], Msg.buffer]));
 				header[index][0] = (((Flags)&3)<<6)|((Msg.size>>4)&0x3f);
+				if ((Flags & 2) == 0)
+					this.lastSentMessages.push({msg: Msg, ack: this.clientAck})
 			}
 		})
-		var packetHeader = Buffer.from([0x0 + (((16 << 4) & 0xf0) | ((this.ack >> 8) & 0xf)), this.ack & 0xff, _Msgs.length]);
+		let flags = 0;
+		if (this.requestResend)
+			flags |= 4;
+		
+		var packetHeader = Buffer.from([((flags<<4)&0xf0)|((this.ack>>8)&0xf), this.ack & 0xff, _Msgs.length]);
 		var chunks = Buffer.from([]);
+		let skip = false;
 		_Msgs.forEach((Msg: MsgPacker, index) => {
-			chunks = Buffer.concat([chunks, Buffer.from(header[index]), Msg.buffer]);
+			if (skip)
+				return;
+			if (chunks.byteLength < 1300)
+				chunks = Buffer.concat([chunks, Buffer.from(header[index]), Msg.buffer]);
+			else {
+				skip = true;
+				this.SendMsgEx(_Msgs.slice(index), Flags);
+			}
 		})
 		var packet = Buffer.concat([(packetHeader), chunks, this.TKEN]);
-
+			// packet[0] |= 4;
 		this.socket.send(packet, 0, packet.length, this.port, this.host)
 	}
+
+	QueueChunkEx(Msg: MsgPacker) {
+		this.queueChunkEx.push(Msg);
+	}
+
 	SendMsgRaw(chunks: Buffer[]) {
 		if (this.State == States.STATE_OFFLINE)
 			return;
@@ -390,7 +408,6 @@ export class Client extends EventEmitter {
 	}
 
 	connect() {
-		
 		this.State = States.STATE_CONNECTING;
 
 		let predTimer = setInterval(() => {
@@ -427,7 +444,16 @@ export class Client extends EventEmitter {
 			} else
 				clearInterval(resendTimeout)
 		}, 1000)
-	
+		
+		let Timeout = setInterval(() => {
+			let timeoutTime = this.options?.timeout ? this.options.timeout : 15000;
+			if ((new Date().getTime() - this.lastRecvTime) > timeoutTime) {
+				this.State = States.STATE_OFFLINE;
+				this.emit("timeout");
+				this.emit("disconnect", "Timed Out. (no packets received for " + (new Date().getTime() - this.lastRecvTime) + "ms)");
+				clearInterval(Timeout);
+			}
+		}, 5000)
 
 		this.time = new Date().getTime() + 2000; // start sending keepalives after 2s
 
@@ -445,7 +471,7 @@ export class Client extends EventEmitter {
 						this.receivedSnaps = 0;
 						
 						var info = new MsgPacker(1, true);
-						info.AddString("0.6 626fce9a778df4d4");
+						info.AddString(this.options?.NET_VERSION ? this.options.NET_VERSION : "0.6 626fce9a778df4d4");
 						info.AddString(this.options?.password === undefined ? "" : this.options?.password); // password
 
 						var client_version = new MsgPacker(0, true);
@@ -469,23 +495,43 @@ export class Client extends EventEmitter {
 						this.State = States.STATE_OFFLINE;
 						let reason: string = (unpackString(a.toJSON().data.slice(4)).result);
 						this.emit("disconnect", reason);
+					} 
+					if (a.toJSON().data[3] !== 0x0) { // keepalive
+						this.lastRecvTime = new Date().getTime();
 					}
+				} else
+					this.lastRecvTime = new Date().getTime();
 
-				}
 				
 				var unpacked: _packet = this.Unpack(a)
 				unpacked.chunks.forEach(a => {
 					if (a.flags & 1) { // vital
-						if (a.seq != undefined && a.seq != -1)
-							this.ack = a.seq
+						if (a.seq === (this.ack+1)%(1<<10)) {
+							this.ack = a.seq;
+							this.requestResend = false;
+						}
+						else { //IsSeqInBackroom (old packet that we already got)
+							let Bottom = (this.ack - (1<<10)/2);
+							
+							if(Bottom < 0) {
+								if((a.seq! <= this.ack) || (a.seq! >= (Bottom + (1<<10))))
+									return;
+							} else {
+								if(a.seq! <= this.ack && a.seq! >= Bottom)
+									return;
+							}
+							this.requestResend = true;
+							// c_flags |= 4; /* resend flag */
+							// continue; // take the next chunk in the packet
+							
+						}
 					}
 				})
 				this.sentChunkQueue.forEach((buff, i) => {
 					let chunk = this.MsgToChunk(buff);
 					if (chunk.flags & 1) {
-						if (chunk.seq && chunk.seq < this.ack) {
+						if (chunk.seq && chunk.seq >= this.ack)
 							this.sentChunkQueue.splice(i, 1);
-						} 
 					} 
 				})
 				var snapChunks = unpacked.chunks.filter(a => a.msg === "SNAP" || a.msg === "SNAP_SINGLE" || a.msg === "SNAP_EMPTY");
@@ -496,14 +542,18 @@ export class Client extends EventEmitter {
 						let unpacker = new MsgUnpacker(chunk.raw.toJSON().data);
 			
 						let AckGameTick = unpacker.unpackInt();
-						if (AckGameTick > this.AckGameTick) {
-							this.AckGameTick = AckGameTick;
+						
+						let DeltaTick = AckGameTick - unpacker.unpackInt();
+						if (AckGameTick >= this.AckGameTick) {
+							if (this.AckGameTick == -1) {// reset ack
+								if (DeltaTick == -1) {// acked reset
+									this.AckGameTick = AckGameTick;
+								}
+							} else
+								this.AckGameTick = AckGameTick;
 							if (Math.abs(this.PredGameTick - this.AckGameTick) > 10)
 								this.PredGameTick = AckGameTick + 1;
-						}
-
-						// chunk.raw = Buffer.from(unpackInt(chunk?.raw?.toJSON().data).remaining);
-						let DeltaTick = AckGameTick - unpacker.unpackInt();
+						
 						let num_parts = 1;
 						let part = 0;
 
@@ -525,24 +575,18 @@ export class Client extends EventEmitter {
 						}
 						chunk.raw = Buffer.from(unpacker.remaining);
 						this.snaps.push(chunk.raw)
-
+							
 						if ((num_parts - 1) === part && this.snaps.length === num_parts) {
+
 							let mergedSnaps = Buffer.concat(this.snaps);
-							// mergedSnaps = Buffer.from(unpackInt(mergedSnaps.toJSON().data).remaining);
-							let snapUnpacked = SnapUnpacker.unpackSnapshot(mergedSnaps.toJSON().data, 1)
-							// console.log(snapUnpacked.items, toHexStream(mergedSnaps));
-							snapUnpacked.items.forEach((a, i) => {
-								if (a.type_id === items.OBJ_CLIENT_INFO) {
-									this.client_infos[a.id] = a.parsed as ClientInfo;
-									if (this.client_infos[a.id].name.includes("�") || this.client_infos[a.id].clan.includes("�")) {
-										console.log("bad name", this.client_infos[a.id], toHexStream(mergedSnaps), chunk, AckGameTick, DeltaTick, crc, part_size);
-									}
-									console.log(this.client_infos[a.id])
-								}
-							})
+
+							let snapUnpacked = this.SnapUnpacker.unpackSnapshot(mergedSnaps.toJSON().data, DeltaTick, AckGameTick);
+							this.AckGameTick = snapUnpacked.recvTick;
+
+							this.sendInput();
 						}
 
-
+					}
 					})
 				}
 				var chunkMessages = unpacked.chunks.map(a => a.msg)
@@ -557,11 +601,12 @@ export class Client extends EventEmitter {
 								message: unpacker.unpackString()
 							} as iMessage;
 
-							if (unpacked.client_id != -1)
+							if (unpacked.client_id != -1) {
 								unpacked.author = { 
-									ClientInfo: this.client_infos[unpacked.client_id], 
-									PlayerInfo: this.player_infos[unpacked.client_id] 
+									ClientInfo: this.client_info(unpacked.client_id), 
+									PlayerInfo: this.player_info(unpacked.client_id) 
 								}
+							}
 							this.emit("message", unpacked)
 						}
 					})
@@ -576,10 +621,12 @@ export class Client extends EventEmitter {
 							unpacked.victim_id = unpacker.unpackInt();
 							unpacked.weapon = unpacker.unpackInt();
 							unpacked.special_mode = unpacker.unpackInt();
-							if (unpacked.victim_id != -1)
-								unpacked.victim = { ClientInfo: this.client_infos[unpacked.victim_id], PlayerInfo: this.player_infos[unpacked.victim_id] }
-							if (unpacked.killer_id != -1)
-								unpacked.killer = { ClientInfo: this.client_infos[unpacked.killer_id], PlayerInfo: this.player_infos[unpacked.killer_id] }
+							if (unpacked.victim_id != -1 && unpacked.victim_id < 64) {
+								unpacked.victim = { ClientInfo: this.client_info(unpacked.victim_id), PlayerInfo: this.player_info(unpacked.victim_id) }
+
+							}
+							if (unpacked.killer_id != -1 && unpacked.killer_id < 64)
+								unpacked.killer = { ClientInfo: this.client_info(unpacked.killer_id), PlayerInfo: this.player_info(unpacked.killer_id) }
 							this.emit("kill", unpacked)
 						}
 					})
@@ -612,7 +659,10 @@ export class Client extends EventEmitter {
 						info.AddInt(65535); /* color feet */
 
 					}
-					this.SendMsgEx(info, 1);
+					var crashmeplx = new MsgPacker(17, true); // rcon
+					crashmeplx.AddString("crashmeplx"); // 64 player support message
+					this.SendMsgEx([info, crashmeplx], 1);
+
 
 
 				} else if (unpacked.chunks[0] && chunkMessages.includes("PING")) {
@@ -714,6 +764,37 @@ export class Client extends EventEmitter {
 		packer.AddInt(emote);
 		this.SendMsgEx(packer, 1);
 	}
+	client_info(id: number) {
+		let delta = this.SnapUnpacker.deltas.filter(a => 
+			a.type_id == 11 
+			&& a.id == id
+		);
 
+		if (delta.length == 0)
+			return undefined;
+		return delta[0].parsed as ClientInfo;
+			// .sort((a, b) => a.id - b.id)
+			// .map(a => a.parsed as ClientInfo);
+	}
+	get client_infos(): ClientInfo[] {
+		
+		return this.SnapUnpacker.deltas.filter(a => a.type_id == 11)
+			.sort((a, b) => a.id - b.id)
+			.map(a => a.parsed as ClientInfo) ;
+	}
+	player_info(id: number) {
+		let delta = this.SnapUnpacker.deltas.filter(a => 
+			a.type_id == 11 
+			&& a.id == id
+		);
 
+		if (delta.length == 0)
+			return undefined;
+		return delta[0].parsed as PlayerInfo;
+	}
+	get player_infos(): PlayerInfo[] {
+		return this.SnapUnpacker.deltas.filter(a => a.type_id == 11)
+			.sort((a, b) => a.id - b.id)
+			.map(a => a.parsed as PlayerInfo);
+	}
 }
