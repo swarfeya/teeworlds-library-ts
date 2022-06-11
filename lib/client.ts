@@ -182,6 +182,7 @@ export declare interface Client {
 	on(event: 'disconnect', listener: (reason: string) => void): this;
 
 	on(event: 'message', listener: (message: iMessage) => void): this;
+	on(event: 'broadcast', listener: (message: string) => void): this;
 	on(event: 'kill', listener: (kill: iKillMsg) => void): this;
 	requestResend: boolean;
 }
@@ -526,6 +527,11 @@ export class Client extends EventEmitter {
 							
 						}
 					}
+				})
+				unpacked.chunks.filter(a => a.msgid == NETMSGTYPE.SV_BROADCAST && a.type == 'game').forEach(a => {
+					let unpacker = new MsgUnpacker(a.raw.toJSON().data);
+
+					this.emit("broadcast", unpacker.unpackString());
 				})
 				this.sentChunkQueue.forEach((buff, i) => {
 					let chunk = this.MsgToChunk(buff);
