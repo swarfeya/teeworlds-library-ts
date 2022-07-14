@@ -1,9 +1,11 @@
 export class MsgPacker {
 	result: Buffer;
 	sys: boolean;
-	constructor(msg: number, sys: boolean) {
+	flag: number;
+	constructor(msg: number, sys: boolean, flag: number) {
 		this.result = Buffer.from([2*msg + (sys ? 1 : 0)]);
 		this.sys = sys;
+		this.flag = flag;
 	}
 	AddString(str: string) {
 		this.result = Buffer.concat([this.result, Buffer.from(str), Buffer.from([0x00])])

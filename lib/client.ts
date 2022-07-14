@@ -237,19 +237,22 @@ export class Client extends EventEmitter {
 
 	ResendAfter(lastAck: number) {
 		this.clientAck = lastAck;
+		
+
 		let toResend: MsgPacker[] = [];
 		this.lastSentMessages.forEach(msg => {
 			if (msg.ack > lastAck)
 				toResend.push(msg.msg);
 		});
-		this.SendMsgEx(toResend, 1|2);
+		toResend.forEach(a => a.flag = 1|2);
+		this.SendMsgEx(toResend);
 	}
 
 	Unpack(packet: Buffer): _packet {
 		var unpacked: _packet = { twprotocol: { flags: packet[0] >> 4, ack: ((packet[0]&0xf)<<8) | packet[1], chunkAmount: packet[2], size: packet.byteLength - 3 }, chunks: [] }
 
 
-		if (packet.indexOf(Buffer.from([0xff, 0xff, 0xff, 0xff])) == 0 && !(unpacked.twprotocol.flags & 8) || unpacked.twprotocol.flags == 255) // flags == 255 is connectionless (used for sending usernames)
+		if (packet.indexOf(Buffer.from([0xff, 0xff, 0xff, 0xff])) == 0 )// !(unpacked.twprotocol.flags & 8) || unpacked.twprotocol.flags == 255) // flags == 255 is connectionless (used for sending usernames)
 			return unpacked;
 		if (unpacked.twprotocol.flags & 4) { // resend flag
 			this.ResendAfter(unpacked.twprotocol.ack);
@@ -309,7 +312,7 @@ export class Client extends EventEmitter {
 		})
 	}
 
-	SendMsgEx(Msgs: MsgPacker[] | MsgPacker, Flags: number) {
+	SendMsgEx(Msgs: MsgPacker[] | MsgPacker) {
 		if (this.State == States.STATE_OFFLINE)
 			return; 
 		if (!this.socket)
@@ -328,20 +331,20 @@ export class Client extends EventEmitter {
 		if (this.clientAck == 0)
 			this.lastSentMessages = [];
 		_Msgs.forEach((Msg: MsgPacker, index) => {
-			header[index] = Buffer.alloc((Flags & 1 ? 3 : 2));
-			header[index][0] = ((Flags & 3) << 6) | ((Msg.size >> 4) & 0x3f);
+			header[index] = Buffer.alloc((Msg.flag & 1 ? 3 : 2));
+			header[index][0] = ((Msg.flag & 3) << 6) | ((Msg.size >> 4) & 0x3f);
 			header[index][1] = (Msg.size & 0xf);
-			if (Flags & 1) {
+			if (Msg.flag & 1) {
 				this.clientAck = (this.clientAck + 1) % (1 << 10);
 				if (this.clientAck == 0)
 					this.lastSentMessages = [];
 				header[index][1] |= (this.clientAck >> 2) & 0xf0;
 				header[index][2] = this.clientAck & 0xff;
-				header[index][0] = (((Flags | 2)&3)<<6)|((Msg.size>>4)&0x3f); // 2 is resend flag (ugly hack for queue)
-				if ((Flags & 2) == 0)
+				header[index][0] = (((Msg.flag | 2)&3)<<6)|((Msg.size>>4)&0x3f); // 2 is resend flag (ugly hack for queue)
+				if ((Msg.flag & 2) == 0)
 					this.sentChunkQueue.push(Buffer.concat([header[index], Msg.buffer]));
-				header[index][0] = (((Flags)&3)<<6)|((Msg.size>>4)&0x3f);
-				if ((Flags & 2) == 0)
+				header[index][0] = (((Msg.flag)&3)<<6)|((Msg.size>>4)&0x3f);
+				if ((Msg.flag & 2) == 0)
 					this.lastSentMessages.push({msg: Msg, ack: this.clientAck})
 			}
 		})
@@ -359,11 +362,12 @@ export class Client extends EventEmitter {
 				chunks = Buffer.concat([chunks, Buffer.from(header[index]), Msg.buffer]);
 			else {
 				skip = true;
-				this.SendMsgEx(_Msgs.slice(index), Flags);
+				this.SendMsgEx(_Msgs.slice(index));
 			}
 		})
 		var packet = Buffer.concat([(packetHeader), chunks, this.TKEN]);
-			// packet[0] |= 4;
+		if (chunks.length < 0)
+			return;
 		this.socket.send(packet, 0, packet.length, this.port, this.host)
 	}
 
@@ -382,7 +386,8 @@ export class Client extends EventEmitter {
 		var packetHeader = Buffer.from([0x0+(((16<<4)&0xf0)|((this.ack>>8)&0xf)), this.ack&0xff, chunks.length]);
 
 		var packet = Buffer.concat([(packetHeader), Buffer.concat(chunks), this.TKEN]);
-		
+		if (chunks.length < 0)
+			return;
 		this.socket.send(packet, 0, packet.length, this.port, this.host)
 	}
 
@@ -473,11 +478,11 @@ export class Client extends EventEmitter {
 						this.State = States.STATE_LOADING; // loading state
 						this.receivedSnaps = 0;
 						
-						var info = new MsgPacker(1, true);
+						var info = new MsgPacker(1, true, 1);
 						info.AddString(this.options?.NET_VERSION ? this.options.NET_VERSION : "0.6 626fce9a778df4d4");
 						info.AddString(this.options?.password === undefined ? "" : this.options?.password); // password
 
-						var client_version = new MsgPacker(0, true);
+						var client_version = new MsgPacker(0, true, 1);
 						client_version.AddBuffer(Buffer.from("8c00130484613e478787f672b3835bd4", 'hex'));
 						let randomUuid = Buffer.alloc(16);
 
@@ -492,7 +497,7 @@ export class Client extends EventEmitter {
 							client_version.AddString("DDNet 16.0.3");
 						}
 		
-						this.SendMsgEx([client_version, info], 1)
+						this.SendMsgEx([client_version, info])
 					} else if (a.toJSON().data[3] == 0x4) {
 						// disconnected
 						this.State = States.STATE_OFFLINE;
@@ -502,15 +507,18 @@ export class Client extends EventEmitter {
 					if (a.toJSON().data[3] !== 0x0) { // keepalive
 						this.lastRecvTime = new Date().getTime();
 					}
-				} else
+				} else {
 					this.lastRecvTime = new Date().getTime();
 
+				}
+
 				
-				var unpacked: _packet = this.Unpack(a)
+				var unpacked: _packet = this.Unpack(a);
 				unpacked.chunks.forEach(a => {
-					if (a.flags & 1) { // vital
-						if (a.seq === (this.ack+1)%(1<<10)) {
-							this.ack = a.seq;
+					if (a.flags & 1 && (a.flags !== 15)) { // vital and not connless
+						if (a.seq === (this.ack+1)%(1<<10)) { // https://github.com/nobody-mb/twchatonly/blob/master/chatonly.cpp#L237
+							this.ack = a.seq!;
+							
 							this.requestResend = false;
 						}
 						else { //IsSeqInBackroom (old packet that we already got)
@@ -524,11 +532,10 @@ export class Client extends EventEmitter {
 									return;
 							}
 							this.requestResend = true;
-							// c_flags |= 4; /* resend flag */
-							// continue; // take the next chunk in the packet
 							
 						}
 					}
+
 				})
 				unpacked.chunks.filter(a => a.msgid == NETMSGTYPE.SV_BROADCAST && a.type == 'game').forEach(a => {
 					let unpacker = new MsgUnpacker(a.raw.toJSON().data);
@@ -566,9 +573,7 @@ export class Client extends EventEmitter {
 						let part = 0;
 
 						if (chunk.msg === "SNAP") {
-							// chunk.raw = Buffer.from(unpackInt(chunk?.raw?.toJSON().data).remaining); // delta tick
 							num_parts = unpacker.unpackInt();
-							// chunk.raw = Buffer.from(unpackInt(chunk?.raw?.toJSON().data).remaining); // num parts
 							part = unpacker.unpackInt();
 						}
 						
@@ -641,17 +646,16 @@ export class Client extends EventEmitter {
 							this.emit("motd", message);
 						}
 					})
-				}
 
 				if (unpacked.chunks[0] && chunkMessages.includes("SV_READY_TO_ENTER")) {
-					var Msg = new MsgPacker(15, true); /* entergame */
-					this.SendMsgEx(Msg, 1);
+					var Msg = new MsgPacker(15, true, 1); /* entergame */
+					this.SendMsgEx(Msg);
 				} else if ((unpacked.chunks[0] && chunkMessages.includes("CAPABILITIES") || unpacked.chunks[0] && chunkMessages.includes("MAP_CHANGE"))) {
 					// send ready
-					var Msg = new MsgPacker(14, true); /* ready */
-					this.SendMsgEx(Msg, 1);
-				} else if ((unpacked.chunks[0] && chunkMessages.includes("CON_READY") || unpacked.chunks[0] && chunkMessages.includes("SV_MOTD"))) {
-					var info = new MsgPacker(20, false);
+					var Msg = new MsgPacker(14, true, 1); /* ready */
+					this.SendMsgEx(Msg);
+				} else if ((unpacked.chunks[0] && chunkMessages.includes("CON_READY"))) {
+					var info = new MsgPacker(20, false, 1);
 					if (this.options?.identity) {
 						info.AddString(this.options.identity.name); 
 						info.AddString(this.options.identity.clan); 
@@ -670,15 +674,15 @@ export class Client extends EventEmitter {
 						info.AddInt(65535); /* color feet */
 
 					}
-					var crashmeplx = new MsgPacker(17, true); // rcon
+					var crashmeplx = new MsgPacker(17, true, 1); // rcon
 					crashmeplx.AddString("crashmeplx"); // 64 player support message
-					this.SendMsgEx([info, crashmeplx], 1);
+					this.SendMsgEx([info, crashmeplx]);
 
 
 
 				} else if (unpacked.chunks[0] && chunkMessages.includes("PING")) {
-					var info = new MsgPacker(23, true);
-					this.SendMsgEx(info, 1)
+					var info = new MsgPacker(23, true, 1);
+					this.SendMsgEx(info)
 				}
 				if (chunkMessages.includes("SNAP") || chunkMessages.includes("SNAP_EMPTY") || chunkMessages.includes("SNAP_SINGLE")) {
 					this.receivedSnaps++; /* wait for 2 ss before seeing self as connected */
@@ -700,7 +704,7 @@ export class Client extends EventEmitter {
 		if (this.State != States.STATE_ONLINE)
 			return;
 
-		let inputMsg = new MsgPacker(16, true);
+		let inputMsg = new MsgPacker(16, true, 0);
 		inputMsg.AddInt(this.AckGameTick);
 		inputMsg.AddInt(this.PredGameTick);
 		inputMsg.AddInt(40);
@@ -721,7 +725,7 @@ export class Client extends EventEmitter {
 		input_data.forEach(a => {
 			inputMsg.AddInt(a);
 		});
-		this.SendMsgEx(inputMsg, 0);
+		this.SendMsgEx(inputMsg);
 	}
 	get input() {
 		return this.movement.input;
@@ -740,18 +744,18 @@ export class Client extends EventEmitter {
 	}
 
 	Say(message: string, team = false) {
-		var packer = new MsgPacker(NETMSGTYPE.CL_SAY, false);
+		var packer = new MsgPacker(NETMSGTYPE.CL_SAY, false, 1);
 		packer.AddInt(team ? 1 : 0); // team
 		packer.AddString(message);
-		this.SendMsgEx(packer, 1);
+		this.QueueChunkEx(packer);
 	}
 	Vote(vote: boolean) {
-		var packer = new MsgPacker(NETMSGTYPE.CL_VOTE, false);
-		packer.AddInt(vote ? 1 : 0);
-		this.SendMsgEx(packer, 1);
+		var packer = new MsgPacker(NETMSGTYPE.CL_VOTE, false, 1);
+		packer.AddInt(vote ? 1 : -1);
+		this.QueueChunkEx(packer);
 	}
 	ChangePlayerInfo(playerInfo: ClientInfo) {
-		var packer = new MsgPacker(NETMSGTYPE.CL_CHANGEINFO, false);
+		var packer = new MsgPacker(NETMSGTYPE.CL_CHANGEINFO, false, 1);
 		packer.AddString(playerInfo.name); //m_pName);
 		packer.AddString(playerInfo.clan); //m_pClan);
 		packer.AddInt(playerInfo.country); //m_Country);
@@ -759,21 +763,21 @@ export class Client extends EventEmitter {
 		packer.AddInt(playerInfo.use_custom_color ? 1 : 0); //m_UseCustomColor);
 		packer.AddInt(playerInfo.color_body); //m_ColorBody);
 		packer.AddInt(playerInfo.color_feet); //m_ColorFeet);
-		this.SendMsgEx(packer, 1);
+		this.QueueChunkEx(packer);
 	}
 	Kill() {
-		var packer = new MsgPacker(NETMSGTYPE.CL_KILL, false);
-		this.SendMsgEx(packer, 1);
+		var packer = new MsgPacker(NETMSGTYPE.CL_KILL, false, 1);
+		this.QueueChunkEx(packer);
 	}
 	ChangeTeam(team: number) {
-		var packer = new MsgPacker(NETMSGTYPE.CL_SETTEAM, false);
+		var packer = new MsgPacker(NETMSGTYPE.CL_SETTEAM, false, 1);
 		packer.AddInt(team);
-		this.SendMsgEx(packer, 1);
+		this.QueueChunkEx(packer);
 	}
 	Emote(emote: number) {
-		var packer = new MsgPacker(NETMSGTYPE.CL_EMOTICON, false);
+		var packer = new MsgPacker(NETMSGTYPE.CL_EMOTICON, false, 1);
 		packer.AddInt(emote);
-		this.SendMsgEx(packer, 1);
+		this.QueueChunkEx(packer);
 	}
 	client_info(id: number) {
 		let delta = this.SnapUnpacker.deltas.filter(a => 
