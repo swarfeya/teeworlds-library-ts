@@ -184,6 +184,8 @@ export declare interface Client {
 	on(event: 'message', listener: (message: iMessage) => void): this;
 	on(event: 'broadcast', listener: (message: string) => void): this;
 	on(event: 'kill', listener: (kill: iKillMsg) => void): this;
+	on(event: 'motd', listener: (message: string) => void): this;
+	
 	requestResend: boolean;
 }
 
@@ -617,8 +619,7 @@ export class Client extends EventEmitter {
 						}
 					})
 				}
-				if (chunkMessages.includes("SV_KILL_MSG")) {
-					var chat = unpacked.chunks.filter(a => a.msg == "SV_KILL_MSG");
+					var chat = unpacked.chunks.filter(a => a.msg == "SV_KILL_MSG" || a.msg == "SV_MOTD");
 					chat.forEach(a => {
 						if (a.msg == "SV_KILL_MSG") {
 							var unpacked: iKillMsg = {} as iKillMsg;
@@ -634,6 +635,10 @@ export class Client extends EventEmitter {
 							if (unpacked.killer_id != -1 && unpacked.killer_id < 64)
 								unpacked.killer = { ClientInfo: this.client_info(unpacked.killer_id), PlayerInfo: this.player_info(unpacked.killer_id) }
 							this.emit("kill", unpacked)
+						} else if (a.msg == "SV_MOTD") {
+							let unpacker = new MsgUnpacker(a.raw.toJSON().data);
+							let message = unpacker.unpackString();
+							this.emit("motd", message);
 						}
 					})
 				}
