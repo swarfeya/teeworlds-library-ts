@@ -397,13 +397,13 @@ export class Snapshot {
 		for (let newSnap of newSnaps) {
 			if (this.eSnapHolder.filter(a => a.ack == newSnap.ack && a.Snapshot.Key == newSnap.Snapshot.Key).length === 0) { // ugly copy new snap to eSnapHolder (if it isnt pushed already)
 				this.eSnapHolder.push({Snapshot: {Data: newSnap.Snapshot.Data, Key: newSnap.Snapshot.Key}, ack: recvTick});
-				let ____index = this.deltas.map(delta => delta.key).indexOf(newSnap.Snapshot.Key);
-
-				if (____index > -1 && deltatick > -1) {
-					this.deltas[____index] = {data: newSnap.Snapshot.Data, key: newSnap.Snapshot.Key, id: newSnap.Snapshot.Key & 0xffff, type_id: ((newSnap.Snapshot.Key >> 16) & 0xffff), parsed: this.parseItem(newSnap.Snapshot.Data, ((newSnap.Snapshot.Key >> 16) & 0xffff))};
-				} else 
-					this.deltas.push({data: newSnap.Snapshot.Data, key: newSnap.Snapshot.Key, id: newSnap.Snapshot.Key & 0xffff, type_id: ((newSnap.Snapshot.Key >> 16) & 0xffff), parsed: this.parseItem(newSnap.Snapshot.Data, ((newSnap.Snapshot.Key >> 16) & 0xffff))});
 			}
+			let ____index = this.deltas.map(delta => delta.key).indexOf(newSnap.Snapshot.Key);
+
+			if (____index > -1 && deltatick > -1) {
+				this.deltas[____index] = {data: newSnap.Snapshot.Data, key: newSnap.Snapshot.Key, id: newSnap.Snapshot.Key & 0xffff, type_id: ((newSnap.Snapshot.Key >> 16) & 0xffff), parsed: this.parseItem(newSnap.Snapshot.Data, ((newSnap.Snapshot.Key >> 16) & 0xffff))};
+			} else 
+				this.deltas.push({data: newSnap.Snapshot.Data, key: newSnap.Snapshot.Key, id: newSnap.Snapshot.Key & 0xffff, type_id: ((newSnap.Snapshot.Key >> 16) & 0xffff), parsed: this.parseItem(newSnap.Snapshot.Data, ((newSnap.Snapshot.Key >> 16) & 0xffff))});
 		}
 		
 		

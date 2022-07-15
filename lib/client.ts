@@ -595,7 +595,9 @@ export class Client extends EventEmitter {
 
 							let snapUnpacked = this.SnapUnpacker.unpackSnapshot(mergedSnaps.toJSON().data, DeltaTick, AckGameTick);
 							this.AckGameTick = snapUnpacked.recvTick;
-
+							
+							this.emit("snapshot");
+							
 							this.sendInput();
 						}
 
