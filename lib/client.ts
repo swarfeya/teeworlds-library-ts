@@ -141,7 +141,8 @@ declare interface iOptions {
 	password?: string,
 	ddnet_version?: {version: number, release_version: string},
 	timeout?: number, // in ms
-	NET_VERSION?: string
+	NET_VERSION?: string,
+	lightweight?: boolean // experimental, only sends keepalive's (sendinput has to be called manually)
 }
 
 export declare interface Client {
@@ -434,15 +435,16 @@ export class Client extends EventEmitter {
 			else
 				clearInterval(connectInterval)
 		}, 500);
-
-		let inputInterval = setInterval(() => {
-			if (this.State == States.STATE_OFFLINE)
-				clearInterval(inputInterval)
-			if (this.State != States.STATE_ONLINE)
-				return;
-			this.time = new Date().getTime();
-			this.sendInput();
-		}, 500)
+		if (!this.options?.lightweight) {
+			let inputInterval = setInterval(() => {
+				if (this.State == States.STATE_OFFLINE)
+					clearInterval(inputInterval)
+				if (this.State != States.STATE_ONLINE)
+					return;
+				this.time = new Date().getTime();
+				this.sendInput();
+			}, 500)
+		}
 
 		let resendTimeout = setInterval(() => {
 			if (this.State != States.STATE_OFFLINE) {
@@ -549,7 +551,9 @@ export class Client extends EventEmitter {
 							this.sentChunkQueue.splice(i, 1);
 					} 
 				})
-				var snapChunks = unpacked.chunks.filter(a => a.msg === "SNAP" || a.msg === "SNAP_SINGLE" || a.msg === "SNAP_EMPTY");
+				let snapChunks: chunk[] = [];
+				if (this.options?.lightweight !== true) 
+					snapChunks = unpacked.chunks.filter(a => a.msg === "SNAP" || a.msg === "SNAP_SINGLE" || a.msg === "SNAP_EMPTY");
 				if (snapChunks.length > 0) {
 					let part = 0;
 					let num_parts = 1;
@@ -749,12 +753,18 @@ export class Client extends EventEmitter {
 		var packer = new MsgPacker(NETMSGTYPE.CL_SAY, false, 1);
 		packer.AddInt(team ? 1 : 0); // team
 		packer.AddString(message);
-		this.QueueChunkEx(packer);
+		if (!this.options?.lightweight)
+			this.QueueChunkEx(packer);
+		else
+			this.SendMsgEx(packer);
 	}
 	Vote(vote: boolean) {
 		var packer = new MsgPacker(NETMSGTYPE.CL_VOTE, false, 1);
 		packer.AddInt(vote ? 1 : -1);
-		this.QueueChunkEx(packer);
+		if (!this.options?.lightweight)
+			this.QueueChunkEx(packer);
+		else
+			this.SendMsgEx(packer);
 	}
 	ChangePlayerInfo(playerInfo: ClientInfo) {
 		var packer = new MsgPacker(NETMSGTYPE.CL_CHANGEINFO, false, 1);
@@ -765,21 +775,33 @@ export class Client extends EventEmitter {
 		packer.AddInt(playerInfo.use_custom_color ? 1 : 0); //m_UseCustomColor);
 		packer.AddInt(playerInfo.color_body); //m_ColorBody);
 		packer.AddInt(playerInfo.color_feet); //m_ColorFeet);
-		this.QueueChunkEx(packer);
+		if (!this.options?.lightweight)
+			this.QueueChunkEx(packer);
+		else
+			this.SendMsgEx(packer);
 	}
 	Kill() {
 		var packer = new MsgPacker(NETMSGTYPE.CL_KILL, false, 1);
-		this.QueueChunkEx(packer);
+		if (!this.options?.lightweight)
+			this.QueueChunkEx(packer);
+		else
+			this.SendMsgEx(packer);
 	}
 	ChangeTeam(team: number) {
 		var packer = new MsgPacker(NETMSGTYPE.CL_SETTEAM, false, 1);
 		packer.AddInt(team);
-		this.QueueChunkEx(packer);
+		if (!this.options?.lightweight)
+			this.QueueChunkEx(packer);
+		else
+			this.SendMsgEx(packer);
 	}
 	Emote(emote: number) {
 		var packer = new MsgPacker(NETMSGTYPE.CL_EMOTICON, false, 1);
 		packer.AddInt(emote);
-		this.QueueChunkEx(packer);
+		if (!this.options?.lightweight)
+			this.QueueChunkEx(packer);
+		else
+			this.SendMsgEx(packer);
 	}
 	client_info(id: number) {
 		let delta = this.SnapUnpacker.deltas.filter(a => 
