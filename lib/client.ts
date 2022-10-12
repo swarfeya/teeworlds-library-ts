@@ -516,6 +516,8 @@ export class Client extends EventEmitter {
 
 				
 				var unpacked: _packet = this.Unpack(a);
+				unpacked.chunks = unpacked.chunks.filter(a => ((a.flags & 2) && (a.flags & 1)) ? a.seq! > this.ack : true); // filter out already received chunks
+
 				unpacked.chunks.forEach(a => {
 					if (a.flags & 1 && (a.flags !== 15)) { // vital and not connless
 						if (a.seq === (this.ack+1)%(1<<10)) { // https://github.com/nobody-mb/twchatonly/blob/master/chatonly.cpp#L237
