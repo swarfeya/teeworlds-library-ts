@@ -6,8 +6,9 @@ https://www.npmjs.com/package/teeworlds
 
 # Usage
 Example file:
-```const teeworlds = require('teeworlds')
-let client = new teeworlds.Client("176.9.114.238", 8348, "nameless tee");
+```
+const teeworlds = require('teeworlds')
+let client = new teeworlds.Client("127.0.0.1", 8303, "nameless tee");
 
 client.connect();
 
