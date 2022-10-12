@@ -162,6 +162,9 @@ export declare interface Client {
 	timer: number;
 	PredGameTick: number;
 	AckGameTick: number;
+	
+	SnapshotParts: number;
+	currentSnapshotGameTick: number;
 
 	movement: Movement;
 
@@ -203,6 +206,10 @@ export class Client extends EventEmitter {
 		this.name = nickname;
 		this.AckGameTick = 0;
 		this.PredGameTick = 0;
+		this.currentSnapshotGameTick = 0;
+
+		this.SnapshotParts = 0;
+		
 		this.SnapUnpacker = new Snapshot();
 		// this.eSnapHolder = [];
 		this.requestResend = false;
@@ -559,55 +566,63 @@ export class Client extends EventEmitter {
 				if (snapChunks.length > 0) {
 					let part = 0;
 					let num_parts = 1;
+					if (Math.abs(this.PredGameTick - this.AckGameTick) > 10)
+						this.PredGameTick = this.AckGameTick + 1;
+
 					snapChunks.forEach(chunk => {
 						let unpacker = new MsgUnpacker(chunk.raw.toJSON().data);
 			
-						let AckGameTick = unpacker.unpackInt();
-						
-						let DeltaTick = AckGameTick - unpacker.unpackInt();
-						if (AckGameTick >= this.AckGameTick) {
-							if (this.AckGameTick == -1) {// reset ack
-								if (DeltaTick == -1) {// acked reset
-									this.AckGameTick = AckGameTick;
-								}
-							} else
-								this.AckGameTick = AckGameTick;
-							if (Math.abs(this.PredGameTick - this.AckGameTick) > 10)
-								this.PredGameTick = AckGameTick + 1;
-						
-						let num_parts = 1;
-						let part = 0;
+						let NumParts = 1;
+						let Part = 0;
+						let GameTick = unpacker.unpackInt();
+						let DeltaTick = GameTick - unpacker.unpackInt();
+						let PartSize = 0;
+						let Crc = 0;
+						let CompleteSize = 0;
 
-						if (chunk.msg === "SNAP") {
-							num_parts = unpacker.unpackInt();
-							part = unpacker.unpackInt();
-						}
-						
-						let crc = 0;
-						let part_size = 0;
+						if (chunk.msg == "SNAP") {
+							NumParts = unpacker.unpackInt();
+							Part = unpacker.unpackInt();
+						}	
+
 						if (chunk.msg != "SNAP_EMPTY") {
-							crc = unpacker.unpackInt(); // crc
-							part_size = unpacker.unpackInt();
-						}
-						if (part === 0 || this.snaps.length > 30) {
-							this.snaps = [];
-						}
-						chunk.raw = Buffer.from(unpacker.remaining);
-						this.snaps.push(chunk.raw)
-							
-						if ((num_parts - 1) === part && this.snaps.length === num_parts) {
-
-							let mergedSnaps = Buffer.concat(this.snaps);
-
-							let snapUnpacked = this.SnapUnpacker.unpackSnapshot(mergedSnaps.toJSON().data, DeltaTick, AckGameTick);
-							this.AckGameTick = snapUnpacked.recvTick;
-							
-							this.emit("snapshot");
-							
-							this.sendInput();
+							Crc = unpacker.unpackInt();
+							PartSize = unpacker.unpackInt();
 						}
 
-					}
+						if (PartSize < 1 || NumParts > 64 || Part < 0 || Part >= NumParts || PartSize <= 0 || PartSize > 900)
+							return;
+
+						if (GameTick >= this.currentSnapshotGameTick) {
+							if (GameTick != this.currentSnapshotGameTick) {
+								this.snaps = [];
+								this.SnapshotParts = 0;
+								this.currentSnapshotGameTick = GameTick;
+							}
+
+							// chunk.raw = Buffer.from(unpacker.remaining);
+							this.snaps[Part] = Buffer.from(unpacker.remaining);
+
+							this.SnapshotParts |= 1 << Part;
+							
+							if (this.SnapshotParts == ((1 << NumParts) - 1)) {
+								let mergedSnaps = Buffer.concat(this.snaps);
+								this.SnapshotParts = 0;
+
+								let snapUnpacked = this.SnapUnpacker.unpackSnapshot(mergedSnaps.toJSON().data, DeltaTick, GameTick);
+								
+								this.emit("snapshot");
+								this.AckGameTick = snapUnpacked.recvTick;
+								if (Math.abs(this.PredGameTick - this.AckGameTick) > 10)
+									this.PredGameTick = this.AckGameTick + 1;
+
+								this.sendInput();
+							} 
+
+
+						} 
+
+					
 					})
 				}
 				var chunkMessages = unpacked.chunks.map(a => a.msg)
