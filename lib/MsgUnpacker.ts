@@ -1,23 +1,17 @@
 const decoder = new TextDecoder('utf-8');
 export function unpackInt(pSrc: number[]): {result: number, remaining: number[]} {
-	var result = 0;
 	
-	// var iter = pSrc[Symbol.iterator]()
-	// var src: any = iter.next()
-	// src = src.value
-	let srcIndex = 0;
-	var sign = ((pSrc[srcIndex] >> 6) & 1)
+	var srcIndex = 0;
+	const sign = ((pSrc[srcIndex] >> 6) & 1)
 	
-	result |= (pSrc[srcIndex] & 0b0011_1111)
-	for (let i = 0; i < 4; i++) {
+	var result = (pSrc[srcIndex] & 0b0011_1111)
+	while (srcIndex <= 4) {
 		
 		if ((pSrc[srcIndex] & 0b1000_0000) === 0)
 			break;
-		// src = iter.next()
 
-		// src = src.value;
 		srcIndex++;
-		result |= ((pSrc[srcIndex] & 0b0111_1111)) << (6+7*i)
+		result |= ((pSrc[srcIndex] & 0b0111_1111)) << (6+7*(srcIndex-1))
 		
 	}
 	result ^= -sign;
