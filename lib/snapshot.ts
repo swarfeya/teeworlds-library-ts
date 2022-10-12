@@ -60,19 +60,19 @@ export class Snapshot {
 
 	private IntsToStr(pInts: number[]): string {
 		var pIntz: number[] = [];
-		var pStr = ''
+		// var pStr = ''
 		for (let x of pInts) {
-			pStr += String.fromCharCode((((x) >> 24) & 0xff) - 128);
+			// pStr += String.fromCharCode((((x) >> 24) & 0xff) - 128);
 			pIntz.push((((x) >> 24) & 0xff) - 128);
-			pStr += String.fromCharCode((((x) >> 16) & 0xff) - 128);
+			// pStr += String.fromCharCode((((x) >> 16) & 0xff) - 128);
 			pIntz.push((((x) >> 16) & 0xff) - 128);
-			pStr += String.fromCharCode((((x) >> 8) & 0xff) - 128);
+			// pStr += String.fromCharCode((((x) >> 8) & 0xff) - 128);
 			pIntz.push((((x) >> 8) & 0xff) - 128);
-			pStr += String.fromCharCode(((x) & 0xff) - 128);
+			// pStr += String.fromCharCode(((x) & 0xff) - 128);
 			pIntz.push(((x) & 0xff) - 128);
 		}
 		pIntz.splice(-1, 1)
-		pStr = decoder.decode(new Uint8Array(pIntz));
+		let pStr = decoder.decode(new Uint8Array(pIntz));
 
     	pStr = pStr.replace(/\0.*/g, ''); // Remove content from first null char to end.
 		return pStr;
@@ -306,7 +306,8 @@ export class Snapshot {
 		}
 		if (snap.length == 0) {
 			// empty snap, copy old one into new ack
-			this.eSnapHolder.filter(a => a.ack == deltatick).forEach(snap => {
+			this.eSnapHolder.forEach(snap => {
+				if (snap.ack == deltatick)
 				this.eSnapHolder.push({Snapshot: snap.Snapshot, ack: recvTick});
 
 			})
@@ -330,14 +331,19 @@ export class Snapshot {
 			[  ] item_deltas
 		*/
 
+		var deleted: number[] = [];
 		for (let i = 0; i < num_removed_items; i++) {
 			let deleted_key = unpacker.unpackInt(); // removed_item_keys
-			let index = this.deltas.map(delta => delta.key).indexOf(deleted_key);
+			// let index = this.deltas.map(delta => delta.key).indexOf(deleted_key);
+			let index = this.deltas.findIndex(delta => delta.key === deleted_key);
 			// console.log("deleting ", deleted_key, index)
 			if (index > -1)
 				this.deltas.splice(index, 1);
-			this.eSnapHolder = this.eSnapHolder.filter(a => a.Snapshot.Key !== deleted_key);
+			deleted.push(deleted_key)
 		}
+		if (deleted.length)
+			this.eSnapHolder = this.eSnapHolder.filter(a => !deleted.includes(a.Snapshot.Key));
+		
 		/*item_delta:
 			[ 4] type_id
 			[ 4] id
@@ -378,7 +384,8 @@ export class Snapshot {
 			}
 			// console.log(index, deltatick)
 			if (deltatick >= 0) { 
-				let index = deltaSnaps.map(delta => delta.Snapshot.Key).indexOf(key)
+				// let index = deltaSnaps.map(delta => delta.Snapshot.Key).indexOf(key)
+				let index = deltaSnaps.findIndex(delta => delta.Snapshot.Key === key);
 				if (index > -1) {
 				
 					let out = UndiffItem(deltaSnaps[index].Snapshot.Data, data)
@@ -395,21 +402,25 @@ export class Snapshot {
 
 		}
 		for (let newSnap of newSnaps) {
-			if (this.eSnapHolder.filter(a => a.ack == newSnap.ack && a.Snapshot.Key == newSnap.Snapshot.Key).length === 0) { // ugly copy new snap to eSnapHolder (if it isnt pushed already)
+			if (this.eSnapHolder.findIndex(a => a.ack == newSnap.ack && a.Snapshot.Key == newSnap.Snapshot.Key) === -1) { // ugly copy new snap to eSnapHolder (if it isnt pushed already)
 				this.eSnapHolder.push({Snapshot: {Data: newSnap.Snapshot.Data, Key: newSnap.Snapshot.Key}, ack: recvTick});
 			}
-			let ____index = this.deltas.map(delta => delta.key).indexOf(newSnap.Snapshot.Key);
-
-			if (____index > -1 && deltatick > -1) {
-				this.deltas[____index] = {data: newSnap.Snapshot.Data, key: newSnap.Snapshot.Key, id: newSnap.Snapshot.Key & 0xffff, type_id: ((newSnap.Snapshot.Key >> 16) & 0xffff), parsed: this.parseItem(newSnap.Snapshot.Data, ((newSnap.Snapshot.Key >> 16) & 0xffff))};
-			} else 
-				this.deltas.push({data: newSnap.Snapshot.Data, key: newSnap.Snapshot.Key, id: newSnap.Snapshot.Key & 0xffff, type_id: ((newSnap.Snapshot.Key >> 16) & 0xffff), parsed: this.parseItem(newSnap.Snapshot.Data, ((newSnap.Snapshot.Key >> 16) & 0xffff))});
+			if (deltatick > -1) {
+				let ____index = this.deltas.findIndex(delta => delta.key == newSnap.Snapshot.Key)
+				
+				if (____index > -1) {
+					this.deltas[____index] = {data: newSnap.Snapshot.Data, key: newSnap.Snapshot.Key, id: newSnap.Snapshot.Key & 0xffff, type_id: ((newSnap.Snapshot.Key >> 16) & 0xffff), parsed: this.parseItem(newSnap.Snapshot.Data, ((newSnap.Snapshot.Key >> 16) & 0xffff))};
+					continue;
+				} 
+			} // else
+			this.deltas.push({data: newSnap.Snapshot.Data, key: newSnap.Snapshot.Key, id: newSnap.Snapshot.Key & 0xffff, type_id: ((newSnap.Snapshot.Key >> 16) & 0xffff), parsed: this.parseItem(newSnap.Snapshot.Data, ((newSnap.Snapshot.Key >> 16) & 0xffff))});
 		}
 		
 		
 		return {items, recvTick};
 	}
 }
+
 function UndiffItem(oldItem: number[], newItem: number[]): number[] {
 	let out: number[] = newItem;
 	if (JSON.stringify(newItem) === JSON.stringify(oldItem))
