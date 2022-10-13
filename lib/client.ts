@@ -10,6 +10,7 @@ import Movement from './movement';
 import { MsgPacker } from './MsgPacker';
 import { Snapshot } from './snapshot';
 import Huffman from "./huffman";
+import { Game } from "./components/game";
 
 const huff = new Huffman();
 
@@ -190,6 +191,7 @@ export class Client extends EventEmitter {
 	
 
 	public movement: Movement;
+	public game: Game;
 
 	// eSnapHolder: eSnap[];
 
@@ -216,10 +218,7 @@ export class Client extends EventEmitter {
 		if (options) 			
 			this.options = options;
 
-		this.timer = 0;
-
-		this.movement = new Movement();
-
+			
 		this.snaps = [];
 
 		this.sentChunkQueue = [];
@@ -229,8 +228,7 @@ export class Client extends EventEmitter {
 		this.ack = 0; // ack of messages the client has received
 		this.clientAck = 0; // ack of messages the client has sent
 		this.receivedSnaps = 0; /* wait for 2 snaps before seeing self as connected */
-		this.lastMsg = "";
-		this.socket = net.createSocket("udp4")
+		this.socket = net.createSocket("udp4");
 		this.socket.bind();
 
 		this.TKEN = Buffer.from([255, 255, 255, 255])
@@ -240,6 +238,9 @@ export class Client extends EventEmitter {
 
 		this.lastSentMessages = [];
 		this.movement = new Movement();
+		
+		this.game = new Game(this);
+
 
 	}
 
@@ -626,7 +627,11 @@ export class Client extends EventEmitter {
 					
 					})
 				}
+				
 				var chunkMessages = unpacked.chunks.map(a => a.msg)
+				if (unpacked.chunks.findIndex(chunk => chunk.msgid == 23 && chunk.type == "sys") !== -1) {
+					this.game._ping_resolve(new Date().getTime())
+				}
 				if (chunkMessages.includes("SV_CHAT")) {
 					var chat = unpacked.chunks.filter(a => a.msg == "SV_CHAT");
 					chat.forEach(a => {
