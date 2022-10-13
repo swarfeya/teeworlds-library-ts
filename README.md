@@ -83,7 +83,7 @@ process.on("SIGINT", () => {
 	// process.exit()
 })
 process.stdin.on("data", data => {
-	client.Say(data.toString()); // write input in chat
+	client.game.Say(data.toString()); // write input in chat
 	
 })
 ```
