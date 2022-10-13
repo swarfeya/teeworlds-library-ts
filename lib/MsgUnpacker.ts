@@ -20,7 +20,7 @@ export function unpackInt(pSrc: number[]): {result: number, remaining: number[]}
 }
 export function unpackString(pSrc: number[]): {result: string, remaining: number[]} {
 	var result = pSrc.slice(0, pSrc.indexOf(0))
-	pSrc = pSrc.slice(pSrc.indexOf(0), pSrc.length)
+	pSrc = pSrc.slice(pSrc.indexOf(0) + 1, pSrc.length)
 	return {result: decoder.decode(new Uint8Array(result)), remaining: pSrc}
 }
 
