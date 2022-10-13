@@ -57,6 +57,7 @@ interface eSnap {
 export class Snapshot {
 	deltas: {'data': number[], 'parsed': Item, 'type_id': number, 'id': number, 'key': number}[] = [];
 	eSnapHolder: eSnap[] = [];
+	crc_errors: number = 0;
 
 	private IntsToStr(pInts: number[]): string {
 		var pIntz: number[] = [];
@@ -297,7 +298,18 @@ export class Snapshot {
 		
 		return _item;
 	}
-	unpackSnapshot(snap: number[], deltatick: number, recvTick: number) { 
+
+	crc(tick: number) {
+		var checksum = 0;
+		this.eSnapHolder.forEach(snap => {
+			if (snap.ack == tick)
+				snap.Snapshot.Data.forEach(el => checksum += el);
+		})
+
+		return checksum & 0xffffffff;
+	}
+
+	unpackSnapshot(snap: number[], deltatick: number, recvTick: number, WantedCrc: number) { 
 		let unpacker = new MsgUnpacker(snap);
 		if (deltatick == -1) {
 			this.eSnapHolder = [];
@@ -309,7 +321,7 @@ export class Snapshot {
 			// empty snap, copy old one into new ack
 			this.eSnapHolder.forEach(snap => {
 				if (snap.ack == deltatick)
-				this.eSnapHolder.push({Snapshot: snap.Snapshot, ack: recvTick});
+					this.eSnapHolder.push({Snapshot: snap.Snapshot, ack: recvTick});
 
 			})
 			return {items: [], recvTick: recvTick};
@@ -337,12 +349,11 @@ export class Snapshot {
 			let deleted_key = unpacker.unpackInt(); // removed_item_keys
 			// let index = this.deltas.map(delta => delta.key).indexOf(deleted_key);
 			let index = this.deltas.findIndex(delta => delta.key === deleted_key);
-			// console.log("deleting ", deleted_key, index)
 			if (index > -1)
 				this.deltas.splice(index, 1);
 			deleted.push(deleted_key)
 		}
-		if (deleted.length)
+		if (deleted.length) 
 			this.eSnapHolder = this.eSnapHolder.filter(a => !deleted.includes(a.Snapshot.Key));
 		
 		/*item_delta:
@@ -355,14 +366,8 @@ export class Snapshot {
 		let deltaSnaps = this.eSnapHolder.filter(a => a.ack === deltatick);
 
 		if (deltaSnaps.length == 0 && deltatick >= 0) {
-			// console.log("RESET recvtick")
 			return {items: [], recvTick: -1};
 		}
-		let newSnaps: eSnap[] = [];
-		deltaSnaps.forEach((a) => {
-			
-			newSnaps.push({Snapshot: a.Snapshot, ack: recvTick});
-		})
 		
 		
 		for (let i = 0; i < num_item_deltas; i++) {
@@ -380,10 +385,7 @@ export class Snapshot {
 			for (let j = 0; j < _size; j++) {
 				if (unpacker.remaining.length > 0) 
 					data.push(unpacker.unpackInt());
-				// else
-					// console.log("wrong size")
 			}
-			// console.log(index, deltatick)
 			if (deltatick >= 0) { 
 				// let index = deltaSnaps.map(delta => delta.Snapshot.Key).indexOf(key)
 				let index = deltaSnaps.findIndex(delta => delta.Snapshot.Key === key);
@@ -402,8 +404,8 @@ export class Snapshot {
 
 
 		}
-		for (let newSnap of newSnaps) {
-			if (this.eSnapHolder.findIndex(a => a.ack == newSnap.ack && a.Snapshot.Key == newSnap.Snapshot.Key) === -1) { // ugly copy new snap to eSnapHolder (if it isnt pushed already)
+		for (let newSnap of deltaSnaps) {
+			if (this.eSnapHolder.findIndex(a => a.ack == recvTick && a.Snapshot.Key == newSnap.Snapshot.Key) === -1) { // ugly copy new snap to eSnapHolder (if it isnt pushed already)
 				this.eSnapHolder.push({Snapshot: {Data: newSnap.Snapshot.Data, Key: newSnap.Snapshot.Key}, ack: recvTick});
 			}
 			if (deltatick > -1) {
@@ -417,6 +419,19 @@ export class Snapshot {
 			this.deltas.push({data: newSnap.Snapshot.Data, key: newSnap.Snapshot.Key, id: newSnap.Snapshot.Key & 0xffff, type_id: ((newSnap.Snapshot.Key >> 16) & 0xffff), parsed: this.parseItem(newSnap.Snapshot.Data, ((newSnap.Snapshot.Key >> 16) & 0xffff), ((newSnap.Snapshot.Key) & 0xffff))});
 		}
 		
+		if (this.crc(recvTick) !== WantedCrc) {
+			this.crc_errors++;
+			if (this.crc_errors > 5) {
+				recvTick = -1;
+				this.crc_errors = 0;
+				this.eSnapHolder = [];
+				this.deltas = [];
+			} else {
+				recvTick = deltatick;
+
+			}
+		} else if (this.crc_errors > 0)
+			this.crc_errors--;
 		
 		return {items, recvTick};
 	}
@@ -424,13 +439,14 @@ export class Snapshot {
 
 function UndiffItem(oldItem: number[], newItem: number[]): number[] {
 	let out: number[] = newItem;
-	if (JSON.stringify(newItem) === JSON.stringify(oldItem))
-		return newItem;
+	// if (JSON.stringify(newItem) === JSON.stringify(oldItem))
+		// return newItem;
 	oldItem.forEach((a, i) => {
 		if (a !== undefined && out[i] !== undefined) {
 			out[i] += a;
-		} else
+		} else {
 			out[i] = 0;
+		}
 	})
 	return out;
 }
