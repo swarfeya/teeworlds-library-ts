@@ -146,41 +146,7 @@ declare interface iOptions {
 }
 
 export declare interface Client {
-	host: string;
-	port: number;
-	name: string;
-	State: number; // 0 = offline; 1 = STATE_CONNECTING = 1, STATE_LOADING = 2, STATE_ONLINE = 3
-	ack: number;
-	clientAck: number;
-	receivedSnaps: number; /* wait for 2 ss before seeing self as connected */
-	lastMsg: string;
-	socket: net.Socket | undefined;
-	TKEN: Buffer;
-	time: number;
-	SnapUnpacker: Snapshot;
-
-	timer: number;
-	PredGameTick: number;
-	AckGameTick: number;
 	
-	SnapshotParts: number;
-	currentSnapshotGameTick: number;
-
-	movement: Movement;
-
-	snaps: Buffer[];
-
-	sentChunkQueue: Buffer[];
-	queueChunkEx: MsgPacker[];
-	lastSendTime: number;
-	lastRecvTime: number;
-
-	lastSentMessages: {msg: MsgPacker, ack: number}[];
-
-	// eSnapHolder: eSnap[];
-
-
-	options?: iOptions;
 
 	on(event: 'connected', listener: () => void): this;
 	on(event: 'disconnect', listener: (reason: string) => void): this;
@@ -190,15 +156,48 @@ export declare interface Client {
 	on(event: 'kill', listener: (kill: iKillMsg) => void): this;
 	on(event: 'motd', listener: (message: string) => void): this;
 	
-	requestResend: boolean;
 }
-
-
 
 export class Client extends EventEmitter {
 
+	private host: string;
+	private port: number;
+	private name: string;
+	private State: number; // 0 = offline; 1 = STATE_CONNECTING = 1, STATE_LOADING = 2, STATE_ONLINE = 3
+	private ack: number;
+	private clientAck: number;
+	private receivedSnaps: number; /* wait for 2 ss before seeing self as connected */
+	private socket: net.Socket | undefined;
+	private TKEN: Buffer;
+	private time: number;
+	private SnapUnpacker: Snapshot;
+
+	private PredGameTick: number;
+	private AckGameTick: number;
+	
+	private SnapshotParts: number;
+	private currentSnapshotGameTick: number;
+
+	
+	private snaps: Buffer[];
+	
+	private sentChunkQueue: Buffer[];
+	private queueChunkEx: MsgPacker[];
+	private lastSendTime: number;
+	private lastRecvTime: number;
+
+	private lastSentMessages: {msg: MsgPacker, ack: number}[];
+	
+
+	public movement: Movement;
+
+	// eSnapHolder: eSnap[];
 
 
+	public readonly options?: iOptions;
+	private requestResend: boolean;
+
+  
 	constructor(ip: string, port: number, nickname: string, options?: iOptions) {
 		super();
 		this.host = ip;
@@ -240,10 +239,11 @@ export class Client extends EventEmitter {
 		this.lastRecvTime = new Date().getTime();
 
 		this.lastSentMessages = [];
+		this.movement = new Movement();
 
 	}
 
-	ResendAfter(lastAck: number) {
+	private ResendAfter(lastAck: number) {
 		this.clientAck = lastAck;
 		
 
@@ -256,7 +256,7 @@ export class Client extends EventEmitter {
 		this.SendMsgEx(toResend);
 	}
 
-	Unpack(packet: Buffer): _packet {
+	private Unpack(packet: Buffer): _packet {
 		var unpacked: _packet = { twprotocol: { flags: packet[0] >> 4, ack: ((packet[0]&0xf)<<8) | packet[1], chunkAmount: packet[2], size: packet.byteLength - 3 }, chunks: [] }
 
 
@@ -301,6 +301,8 @@ export class Client extends EventEmitter {
 		}
 		return unpacked
 	}
+
+	/* Send a Control Msg to the server. (used for disconnect)*/
 	SendControlMsg(msg: number, ExtraMsg: string = "") {
 		this.lastSendTime = new Date().getTime();
 		return new Promise((resolve, reject) => {
@@ -320,6 +322,7 @@ export class Client extends EventEmitter {
 		})
 	}
 
+	/* Send a Msg (or Msg[]) to the server.*/
 	SendMsgEx(Msgs: MsgPacker[] | MsgPacker) {
 		if (this.State == States.STATE_OFFLINE)
 			return; 
@@ -378,11 +381,11 @@ export class Client extends EventEmitter {
 			return;
 		this.socket.send(packet, 0, packet.length, this.port, this.host)
 	}
-
+	/* Queue a chunk (It will get sent in the next packet). */
 	QueueChunkEx(Msg: MsgPacker) {
 		this.queueChunkEx.push(Msg);
 	}
-
+	/* Send a Raw Buffer (as chunk) to the server. */
 	SendMsgRaw(chunks: Buffer[]) {
 		if (this.State == States.STATE_OFFLINE)
 			return;
@@ -399,7 +402,7 @@ export class Client extends EventEmitter {
 		this.socket.send(packet, 0, packet.length, this.port, this.host)
 	}
 
-	MsgToChunk(packet: Buffer) {
+	private MsgToChunk(packet: Buffer) {
 		var chunk: chunk = {} as chunk;
 		chunk.bytes = ((packet[0] & 0x3f) << 4) | (packet[1] & ((1 << 4) - 1));
 		chunk.flags = (packet[0] >> 6) & 3;
@@ -423,6 +426,7 @@ export class Client extends EventEmitter {
 		return chunk;
 	}
 
+	/* Connect the client to the server. */
 	connect() {
 		this.State = States.STATE_CONNECTING;
 
@@ -475,14 +479,15 @@ export class Client extends EventEmitter {
 		this.time = new Date().getTime() + 2000; // start sending keepalives after 2s
 
 		if (this.socket)
-			this.socket.on("message", (a, rinfo) => {
+			this.socket.on("message", (packet, rinfo) => {
 				if (this.State == 0 || rinfo.address != this.host || rinfo.port != this.port)
 					return;
 				clearInterval(connectInterval)
-				if (a.toJSON().data[0] == 0x10) {
-					if (a.toString().includes("TKEN") || a.toJSON().data[3] == 0x2) {
+				
+				if (packet.toJSON().data[0] == 0x10) {
+					if (packet.toString().includes("TKEN") || packet.toJSON().data[3] == 0x2) {
 						clearInterval(connectInterval);
-						this.TKEN = Buffer.from(a.toJSON().data.slice(a.toJSON().data.length - 4, a.toJSON().data.length))
+						this.TKEN = Buffer.from(packet.toJSON().data.slice(packet.toJSON().data.length - 4, packet.toJSON().data.length))
 						this.SendControlMsg(3);
 						this.State = States.STATE_LOADING; // loading state
 						this.receivedSnaps = 0;
@@ -507,28 +512,26 @@ export class Client extends EventEmitter {
 						}
 		
 						this.SendMsgEx([client_version, info])
-					} else if (a.toJSON().data[3] == 0x4) {
+					} else if (packet.toJSON().data[3] == 0x4) {
 						// disconnected
 						this.State = States.STATE_OFFLINE;
-						let reason: string = (unpackString(a.toJSON().data.slice(4)).result);
+						let reason: string = (unpackString(packet.toJSON().data.slice(4)).result);
 						this.emit("disconnect", reason);
 					} 
-					if (a.toJSON().data[3] !== 0x0) { // keepalive
+					if (packet.toJSON().data[3] !== 0x0) { // keepalive
 						this.lastRecvTime = new Date().getTime();
 					}
 				} else {
 					this.lastRecvTime = new Date().getTime();
-
 				}
-
 				
-				var unpacked: _packet = this.Unpack(a);
-				unpacked.chunks = unpacked.chunks.filter(a => ((a.flags & 2) && (a.flags & 1)) ? a.seq! > this.ack : true); // filter out already received chunks
-
-				unpacked.chunks.forEach(a => {
-					if (a.flags & 1 && (a.flags !== 15)) { // vital and not connless
-						if (a.seq === (this.ack+1)%(1<<10)) { // https://github.com/nobody-mb/twchatonly/blob/master/chatonly.cpp#L237
-							this.ack = a.seq!;
+				var unpacked: _packet = this.Unpack(packet);
+				unpacked.chunks = unpacked.chunks.filter(chunk => ((chunk.flags & 2) && (chunk.flags & 1)) ? chunk.seq! > this.ack : true); // filter out already received chunks
+				
+				unpacked.chunks.forEach(chunk => {
+					if (chunk.flags & 1 && (chunk.flags !== 15)) { // vital and not connless
+						if (chunk.seq === (this.ack+1)%(1<<10)) { // https://github.com/nobody-mb/twchatonly/blob/master/chatonly.cpp#L237
+							this.ack = chunk.seq!;
 							
 							this.requestResend = false;
 						}
@@ -536,10 +539,10 @@ export class Client extends EventEmitter {
 							let Bottom = (this.ack - (1<<10)/2);
 							
 							if(Bottom < 0) {
-								if((a.seq! <= this.ack) || (a.seq! >= (Bottom + (1<<10))))
+								if((chunk.seq! <= this.ack) || (chunk.seq! >= (Bottom + (1<<10))))
 									return;
 							} else {
-								if(a.seq! <= this.ack && a.seq! >= Bottom)
+								if(chunk.seq! <= this.ack && chunk.seq! >= Bottom)
 									return;
 							}
 							this.requestResend = true;
@@ -548,7 +551,7 @@ export class Client extends EventEmitter {
 					}
 
 				})
-				unpacked.chunks.filter(a => a.msgid == NETMSGTYPE.SV_BROADCAST && a.type == 'game').forEach(a => {
+				unpacked.chunks.filter(chunk => chunk.msgid == NETMSGTYPE.SV_BROADCAST && chunk.type == 'game').forEach(a => {
 					let unpacker = new MsgUnpacker(a.raw.toJSON().data);
 
 					this.emit("broadcast", unpacker.unpackString());
@@ -562,10 +565,8 @@ export class Client extends EventEmitter {
 				})
 				let snapChunks: chunk[] = [];
 				if (this.options?.lightweight !== true) 
-					snapChunks = unpacked.chunks.filter(a => a.msg === "SNAP" || a.msg === "SNAP_SINGLE" || a.msg === "SNAP_EMPTY");
+					snapChunks = unpacked.chunks.filter(chunk => chunk.msg === "SNAP" || chunk.msg === "SNAP_SINGLE" || chunk.msg === "SNAP_EMPTY");
 				if (snapChunks.length > 0) {
-					let part = 0;
-					let num_parts = 1;
 					if (Math.abs(this.PredGameTick - this.AckGameTick) > 10)
 						this.PredGameTick = this.AckGameTick + 1;
 
@@ -647,7 +648,7 @@ export class Client extends EventEmitter {
 						}
 					})
 				}
-					var chat = unpacked.chunks.filter(a => a.msg == "SV_KILL_MSG" || a.msg == "SV_MOTD");
+					var chat = unpacked.chunks.filter(chunk => chunk.msg == "SV_KILL_MSG" || chunk.msg == "SV_MOTD");
 					chat.forEach(a => {
 						if (a.msg == "SV_KILL_MSG") {
 							var unpacked: iKillMsg = {} as iKillMsg;
@@ -723,6 +724,7 @@ export class Client extends EventEmitter {
 			})
 	}
 
+	/* Sending the input. (automatically done unless options.lightweight is on) */
 	sendInput(input = this.movement.input) {
 		if (this.State != States.STATE_ONLINE)
 			return;
@@ -754,6 +756,7 @@ export class Client extends EventEmitter {
 		return this.movement.input;
 	}
 
+	/* Disconnect the client. */
 	Disconnect() {
 		return new Promise((resolve) => {
 			this.SendControlMsg(4).then(() => {
@@ -766,64 +769,11 @@ export class Client extends EventEmitter {
 		})
 	}
 
-	Say(message: string, team = false) {
-		var packer = new MsgPacker(NETMSGTYPE.CL_SAY, false, 1);
-		packer.AddInt(team ? 1 : 0); // team
-		packer.AddString(message);
-		if (!this.options?.lightweight)
-			this.QueueChunkEx(packer);
-		else
-			this.SendMsgEx(packer);
-	}
-	Vote(vote: boolean) {
-		var packer = new MsgPacker(NETMSGTYPE.CL_VOTE, false, 1);
-		packer.AddInt(vote ? 1 : -1);
-		if (!this.options?.lightweight)
-			this.QueueChunkEx(packer);
-		else
-			this.SendMsgEx(packer);
-	}
-	ChangePlayerInfo(playerInfo: ClientInfo) {
-		var packer = new MsgPacker(NETMSGTYPE.CL_CHANGEINFO, false, 1);
-		packer.AddString(playerInfo.name); //m_pName);
-		packer.AddString(playerInfo.clan); //m_pClan);
-		packer.AddInt(playerInfo.country); //m_Country);
-		packer.AddString(playerInfo.skin); //m_pSkin);
-		packer.AddInt(playerInfo.use_custom_color ? 1 : 0); //m_UseCustomColor);
-		packer.AddInt(playerInfo.color_body); //m_ColorBody);
-		packer.AddInt(playerInfo.color_feet); //m_ColorFeet);
-		if (!this.options?.lightweight)
-			this.QueueChunkEx(packer);
-		else
-			this.SendMsgEx(packer);
-	}
-	Kill() {
-		var packer = new MsgPacker(NETMSGTYPE.CL_KILL, false, 1);
-		if (!this.options?.lightweight)
-			this.QueueChunkEx(packer);
-		else
-			this.SendMsgEx(packer);
-	}
-	ChangeTeam(team: number) {
-		var packer = new MsgPacker(NETMSGTYPE.CL_SETTEAM, false, 1);
-		packer.AddInt(team);
-		if (!this.options?.lightweight)
-			this.QueueChunkEx(packer);
-		else
-			this.SendMsgEx(packer);
-	}
-	Emote(emote: number) {
-		var packer = new MsgPacker(NETMSGTYPE.CL_EMOTICON, false, 1);
-		packer.AddInt(emote);
-		if (!this.options?.lightweight)
-			this.QueueChunkEx(packer);
-		else
-			this.SendMsgEx(packer);
-	}
+	/* Get the client_info from a specific player id. */
 	client_info(id: number) {
-		let delta = this.SnapUnpacker.deltas.filter(a => 
-			a.type_id == 11 
-			&& a.id == id
+		let delta = this.SnapUnpacker.deltas.filter(_delta => 
+			_delta.type_id == 11 
+			&& _delta.id == id
 		);
 
 		if (delta.length == 0)
@@ -832,25 +782,29 @@ export class Client extends EventEmitter {
 			// .sort((a, b) => a.id - b.id)
 			// .map(a => a.parsed as ClientInfo);
 	}
+
+	/* Get all client infos. */
 	get client_infos(): ClientInfo[] {
 		
-		return this.SnapUnpacker.deltas.filter(a => a.type_id == 11)
-			.sort((a, b) => a.id - b.id)
-			.map(a => a.parsed as ClientInfo) ;
+		return this.SnapUnpacker.deltas.filter(_delta => _delta.type_id == 11)
+		.sort((a, b) => a.id - b.id)
+		.map(a => a.parsed as ClientInfo);
 	}
+	/* Get the player info from a specific player id. */
 	player_info(id: number) {
-		let delta = this.SnapUnpacker.deltas.filter(a => 
-			a.type_id == 10
-			&& a.id == id
+		let delta = this.SnapUnpacker.deltas.filter(_delta => 
+			_delta.type_id == 10
+			&& _delta.id == id
 		);
 
 		if (delta.length == 0)
 			return undefined;
 		return delta[0].parsed as PlayerInfo;
 	}
+	/* Get all player infos. */
 	get player_infos(): PlayerInfo[] {
-		return this.SnapUnpacker.deltas.filter(a => a.type_id == 10)
+		return this.SnapUnpacker.deltas.filter(_delta => _delta.type_id == 10)
 			.sort((a, b) => a.id - b.id)
-			.map(a => a.parsed as PlayerInfo);
+			.map(player => player.parsed as PlayerInfo);
 	}
 }

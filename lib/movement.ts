@@ -30,7 +30,7 @@ class Movement {
 		this.input.m_Jump = state ? 1 : 0;
 	}
 	Fire() {
-		this.input.m_Fire = 1;
+		this.input.m_Fire++;
 	}
 	Hook(state = true) {
 		this.input.m_Hook = state ? 1 : 0;

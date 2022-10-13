@@ -77,7 +77,7 @@ export class Snapshot {
     	pStr = pStr.replace(/\0.*/g, ''); // Remove content from first null char to end.
 		return pStr;
 	}
-	private parseItem(data: number[], Type: number): Item {
+	private parseItem(data: number[], Type: number, id: number): Item {
 		var _item = {} as Item; 
 		switch (Type) {
 			case items.OBJ_EX:
@@ -216,6 +216,7 @@ export class Snapshot {
 					use_custom_color: Number(data.slice(14, 15)),
 					color_body: Number(data.slice(15, 16)),
 					color_feet: Number(data.slice(16, 17)),
+					id: id
 				} as ClientInfo
 				break;
 			case items.OBJ_SPECTATOR_INFO:
@@ -375,7 +376,7 @@ export class Snapshot {
 			} else
 				_size = unpacker.unpackInt();
 
-			let data = [];
+			let data: number[] = [];
 			for (let j = 0; j < _size; j++) {
 				if (unpacker.remaining.length > 0) 
 					data.push(unpacker.unpackInt());
@@ -393,7 +394,7 @@ export class Snapshot {
 				} // else no previous, use new data
 			} 
 
-			let parsed = this.parseItem(data, type_id)
+			let parsed = this.parseItem(data, type_id, id)
 			this.eSnapHolder.push({Snapshot: {Data: data, Key: key}, ack: recvTick});
 
 			items.items.push({data, parsed, type_id, id, key})
@@ -409,11 +410,11 @@ export class Snapshot {
 				let ____index = this.deltas.findIndex(delta => delta.key == newSnap.Snapshot.Key)
 				
 				if (____index > -1) {
-					this.deltas[____index] = {data: newSnap.Snapshot.Data, key: newSnap.Snapshot.Key, id: newSnap.Snapshot.Key & 0xffff, type_id: ((newSnap.Snapshot.Key >> 16) & 0xffff), parsed: this.parseItem(newSnap.Snapshot.Data, ((newSnap.Snapshot.Key >> 16) & 0xffff))};
+					this.deltas[____index] = {data: newSnap.Snapshot.Data, key: newSnap.Snapshot.Key, id: newSnap.Snapshot.Key & 0xffff, type_id: ((newSnap.Snapshot.Key >> 16) & 0xffff), parsed: this.parseItem(newSnap.Snapshot.Data, ((newSnap.Snapshot.Key >> 16) & 0xffff), ((newSnap.Snapshot.Key) & 0xffff))};
 					continue;
 				} 
 			} // else
-			this.deltas.push({data: newSnap.Snapshot.Data, key: newSnap.Snapshot.Key, id: newSnap.Snapshot.Key & 0xffff, type_id: ((newSnap.Snapshot.Key >> 16) & 0xffff), parsed: this.parseItem(newSnap.Snapshot.Data, ((newSnap.Snapshot.Key >> 16) & 0xffff))});
+			this.deltas.push({data: newSnap.Snapshot.Data, key: newSnap.Snapshot.Key, id: newSnap.Snapshot.Key & 0xffff, type_id: ((newSnap.Snapshot.Key >> 16) & 0xffff), parsed: this.parseItem(newSnap.Snapshot.Data, ((newSnap.Snapshot.Key >> 16) & 0xffff), ((newSnap.Snapshot.Key) & 0xffff))});
 		}
 		
 		
