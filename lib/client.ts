@@ -25,7 +25,7 @@ enum States {
 }
 
 
-enum NETMSGTYPE {
+enum NETMSG_Game {
 	EX,
 	SV_MOTD,
 	SV_BROADCAST,
@@ -61,12 +61,58 @@ enum NETMSGTYPE {
 	NUM
 }
 
+enum NETMSG_Sys {
+	NETMSG_EX = 0,
+
+	// the first thing sent by the client
+	// contains the version info for the client
+	NETMSG_INFO = 1,
+
+	// sent by server
+	NETMSG_MAP_CHANGE, // sent when client should switch map
+	NETMSG_MAP_DATA, // map transfer, contains a chunk of the map file
+	NETMSG_CON_READY, // connection is ready, client should send start info
+	NETMSG_SNAP, // normal snapshot, multiple parts
+	NETMSG_SNAPEMPTY, // empty snapshot
+	NETMSG_SNAPSINGLE, // ?
+	NETMSG_SNAPSMALL, //
+	NETMSG_INPUTTIMING, // reports how off the input was
+	NETMSG_RCON_AUTH_STATUS, // result of the authentication
+	NETMSG_RCON_LINE, // line that should be printed to the remote console
+
+	NETMSG_AUTH_CHALLANGE, //
+	NETMSG_AUTH_RESULT, //
+
+	// sent by client
+	NETMSG_READY, //
+	NETMSG_ENTERGAME,
+	NETMSG_INPUT, // contains the inputdata from the client
+	NETMSG_RCON_CMD, //
+	NETMSG_RCON_AUTH, //
+	NETMSG_REQUEST_MAP_DATA, //
+
+	NETMSG_AUTH_START, //
+	NETMSG_AUTH_RESPONSE, //
+
+	// sent by both
+	NETMSG_PING,
+	NETMSG_PING_REPLY,
+	NETMSG_ERROR,
+
+	// sent by server (todo: move it up)
+	NETMSG_RCON_CMD_ADD,
+	NETMSG_RCON_CMD_REM,
+
+	NUM_NETMSGS,
+}
+
 interface chunk {
 	bytes: number,
 	flags: number,
 	sequence?: number,
 	seq?: number,
-	type: 'sys' | 'game',
+	// type: 'sys' | 'game',
+	sys: Boolean,
 	msgid: number,
 	msg: string,
 	raw: Buffer,
@@ -193,6 +239,7 @@ export class Client extends EventEmitter {
 	public movement: Movement;
 	public game: Game;
 
+	private VoteList: string[];
 	// eSnapHolder: eSnap[];
 
 
@@ -215,6 +262,8 @@ export class Client extends EventEmitter {
 		// this.eSnapHolder = [];
 		this.requestResend = false;
 		
+		this.VoteList = [];
+
 		if (options) 			
 			this.options = options;
 
@@ -286,7 +335,8 @@ export class Client extends EventEmitter {
 				packet = packet.slice(3) // remove flags & size
 			} else
 				packet = packet.slice(2)
-			chunk.type = packet[0] & 1 ? "sys" : "game"; // & 1 = binary, ****_***1. e.g 0001_0111 sys, 0001_0110 game
+			// chunk.type = packet[0] & 1 ? "sys" : "game"; // & 1 = binary, ****_***1. e.g 0001_0111 sys, 0001_0110 game
+			chunk.sys = Boolean(packet[0] & 1); // & 1 = binary, ****_***1. e.g 0001_0111 sys, 0001_0110 game
 			chunk.msgid = (packet[0] - (packet[0] & 1)) / 2;
 			chunk.msg = messageTypes[packet[0] & 1][chunk.msgid];
 			chunk.raw = packet.slice(1, chunk.bytes)
@@ -414,7 +464,8 @@ export class Client extends EventEmitter {
 			packet = packet.slice(3) // remove flags & size
 		} else
 			packet = packet.slice(2)
-		chunk.type = packet[0] & 1 ? "sys" : "game"; // & 1 = binary, ****_***1. e.g 0001_0111 sys, 0001_0110 game
+		// chunk.type = packet[0] & 1 ? "sys" : "game"; // & 1 = binary, ****_***1. e.g 0001_0111 sys, 0001_0110 game
+		chunk.sys = Boolean(packet[0] & 1); // & 1 = binary, ****_***1. e.g 0001_0111 sys, 0001_0110 game
 		chunk.msgid = (packet[0]-(packet[0]&1))/2;
 		chunk.msg = messageTypes[packet[0]&1][chunk.msgid];
 		chunk.raw = packet.slice(1, chunk.bytes)
@@ -552,11 +603,6 @@ export class Client extends EventEmitter {
 					}
 
 				})
-				unpacked.chunks.filter(chunk => chunk.msgid == NETMSGTYPE.SV_BROADCAST && chunk.type == 'game').forEach(a => {
-					let unpacker = new MsgUnpacker(a.raw.toJSON().data);
-
-					this.emit("broadcast", unpacker.unpackString());
-				})
 				this.sentChunkQueue.forEach((buff, i) => {
 					let chunk = this.MsgToChunk(buff);
 					if (chunk.flags & 1) {
@@ -564,14 +610,61 @@ export class Client extends EventEmitter {
 							this.sentChunkQueue.splice(i, 1);
 					} 
 				})
-				let snapChunks: chunk[] = [];
-				if (this.options?.lightweight !== true) 
-					snapChunks = unpacked.chunks.filter(chunk => chunk.msg === "SNAP" || chunk.msg === "SNAP_SINGLE" || chunk.msg === "SNAP_EMPTY");
-				if (snapChunks.length > 0) {
-					if (Math.abs(this.PredGameTick - this.AckGameTick) > 10)
+				
+				
+				unpacked.chunks.forEach((chunk, index) => {
+					if (chunk.sys) { 
+						// system messages
+						if (chunk.msgid == NETMSG_Sys.NETMSG_PING) { // ping
+							let packer = new MsgPacker(NETMSG_Sys.NETMSG_PING_REPLY, true, 0);
+
+							this.SendMsgEx(packer); // send ping reply
+						} else if (chunk.msgid == NETMSG_Sys.NETMSG_PING_REPLY) { // Ping reply
+							this.game._ping_resolve(new Date().getTime())
+						} 
+
+						// packets neccessary for connection
+						// https://ddnet.org/docs/libtw2/connection/
+
+						if (chunk.msgid == NETMSG_Sys.NETMSG_MAP_CHANGE) {
+							var Msg = new MsgPacker(NETMSG_Sys.NETMSG_READY, true, 1); /* ready */
+							this.SendMsgEx(Msg);		
+						} else if (chunk.msgid == NETMSG_Sys.NETMSG_CON_READY) {
+							var info = new MsgPacker(NETMSG_Game.CL_STARTINFO, false, 1);
+							if (this.options?.identity) {
+								info.AddString(this.options.identity.name); 
+								info.AddString(this.options.identity.clan); 
+								info.AddInt(this.options.identity.country); 
+								info.AddString(this.options.identity.skin); 
+								info.AddInt(this.options.identity.use_custom_color);
+								info.AddInt(this.options.identity.color_body); 
+								info.AddInt(this.options.identity.color_feet); 
+							} else {
+								info.AddString(this.name); /* name */
+								info.AddString(""); /* clan */
+								info.AddInt(-1); /* country */
+								info.AddString("greyfox"); /* skin */
+								info.AddInt(1); /* use custom color */
+								info.AddInt(10346103); /* color body */
+								info.AddInt(65535); /* color feet */
+
+							}
+							var crashmeplx = new MsgPacker(17, true, 1); // rcon
+							crashmeplx.AddString("crashmeplx"); // 64 player support message
+							this.SendMsgEx([info, crashmeplx]);
+						} 
+
+						if (chunk.msgid >= NETMSG_Sys.NETMSG_SNAP && chunk.msgid <= NETMSG_Sys.NETMSG_SNAPSINGLE) {
+							this.receivedSnaps++; /* wait for 2 ss before seeing self as connected */
+							if (this.receivedSnaps == 2) {
+								if (this.State != States.STATE_ONLINE)
+									this.emit('connected')
+								this.State = States.STATE_ONLINE;
+							}
+							if (Math.abs(this.PredGameTick - this.AckGameTick) > 10)
 						this.PredGameTick = this.AckGameTick + 1;
 
-					snapChunks.forEach(chunk => {
+					// snapChunks.forEach(chunk => {
 						let unpacker = new MsgUnpacker(chunk.raw.toJSON().data);
 			
 						let NumParts = 1;
@@ -625,19 +718,46 @@ export class Client extends EventEmitter {
 						} 
 
 					
-					})
+					// })
+
+
 				}
-				
-				var chunkMessages = unpacked.chunks.map(a => a.msg)
-				if (unpacked.chunks.findIndex(chunk => chunk.msgid == 23 && chunk.type == "sys") !== -1) {
-					this.game._ping_resolve(new Date().getTime())
-				}
-				if (chunkMessages.includes("SV_CHAT")) {
-					var chat = unpacked.chunks.filter(a => a.msg == "SV_CHAT");
-					chat.forEach(a => {
-						if (a.msg == "SV_CHAT") {
-							let unpacker = new MsgUnpacker(a.raw.toJSON().data);
-							var unpacked: iMessage = {
+					} else { 
+						// game messages
+						if (chunk.msgid == NETMSG_Game.SV_VOTECLEAROPTIONS) {
+							this.VoteList = [];
+						} else if (chunk.msgid == NETMSG_Game.SV_VOTEOPTIONLISTADD) {
+							let unpacker = new MsgUnpacker(chunk.raw.toJSON().data)
+							let NumOptions = unpacker.unpackInt()
+							let list: string[] = [];
+							for (let i = 0; i < 15; i++) {
+								list.push(unpacker.unpackString());
+							}
+							list = list.slice(NumOptions);
+
+							this.VoteList.push(...list);
+						} else if (chunk.msgid == NETMSG_Game.SV_VOTEOPTIONADD) {
+							let unpacker = new MsgUnpacker(chunk.raw.toJSON().data)
+							
+							this.VoteList.push(unpacker.unpackString());
+						} else if (chunk.msgid == NETMSG_Game.SV_VOTEOPTIONREMOVE) {
+							let unpacker = new MsgUnpacker(chunk.raw.toJSON().data)
+							
+							let index = this.VoteList.indexOf(unpacker.unpackString());
+
+							if (index > -1)
+								this.VoteList = this.VoteList.splice(index, 1);
+							
+						}
+
+
+						if (chunk.msgid == NETMSG_Game.SV_BROADCAST) {
+							let unpacker = new MsgUnpacker(chunk.raw.toJSON().data);
+
+							this.emit("broadcast", unpacker.unpackString());
+						} if (chunk.msgid == NETMSG_Game.SV_CHAT) {
+							let unpacker = new MsgUnpacker(chunk.raw.toJSON().data);
+							let unpacked: iMessage = {
 								team: unpacker.unpackInt(),
 								client_id: unpacker.unpackInt(),
 								message: unpacker.unpackString()
@@ -650,14 +770,9 @@ export class Client extends EventEmitter {
 								}
 							}
 							this.emit("message", unpacked)
-						}
-					})
-				}
-					var chat = unpacked.chunks.filter(chunk => chunk.msg == "SV_KILL_MSG" || chunk.msg == "SV_MOTD");
-					chat.forEach(a => {
-						if (a.msg == "SV_KILL_MSG") {
-							var unpacked: iKillMsg = {} as iKillMsg;
-							let unpacker = new MsgUnpacker(a.raw.toJSON().data);
+						} else if (chunk.msgid == NETMSG_Game.SV_KILLMSG) {
+							let unpacked: iKillMsg = {} as iKillMsg;
+							let unpacker = new MsgUnpacker(chunk.raw.toJSON().data);
 							unpacked.killer_id = unpacker.unpackInt();
 							unpacked.victim_id = unpacker.unpackInt();
 							unpacked.weapon = unpacker.unpackInt();
@@ -669,59 +784,22 @@ export class Client extends EventEmitter {
 							if (unpacked.killer_id != -1 && unpacked.killer_id < 64)
 								unpacked.killer = { ClientInfo: this.client_info(unpacked.killer_id), PlayerInfo: this.player_info(unpacked.killer_id) }
 							this.emit("kill", unpacked)
-						} else if (a.msg == "SV_MOTD") {
-							let unpacker = new MsgUnpacker(a.raw.toJSON().data);
+						} else if (chunk.msgid == NETMSG_Game.SV_MOTD) {
+							let unpacker = new MsgUnpacker(chunk.raw.toJSON().data);
 							let message = unpacker.unpackString();
 							this.emit("motd", message);
 						}
-					})
 
-				if (unpacked.chunks[0] && chunkMessages.includes("SV_READY_TO_ENTER")) {
-					var Msg = new MsgPacker(15, true, 1); /* entergame */
-					this.SendMsgEx(Msg);
-				} else if ((unpacked.chunks[0] && chunkMessages.includes("CAPABILITIES") || unpacked.chunks[0] && chunkMessages.includes("MAP_CHANGE"))) {
-					// send ready
-					var Msg = new MsgPacker(14, true, 1); /* ready */
-					this.SendMsgEx(Msg);
-				} else if ((unpacked.chunks[0] && chunkMessages.includes("CON_READY"))) {
-					var info = new MsgPacker(20, false, 1);
-					if (this.options?.identity) {
-						info.AddString(this.options.identity.name); 
-						info.AddString(this.options.identity.clan); 
-						info.AddInt(this.options.identity.country); 
-						info.AddString(this.options.identity.skin); 
-						info.AddInt(this.options.identity.use_custom_color);
-						info.AddInt(this.options.identity.color_body); 
-						info.AddInt(this.options.identity.color_feet); 
-					} else {
-						info.AddString(this.name); /* name */
-						info.AddString(""); /* clan */
-						info.AddInt(-1); /* country */
-						info.AddString("greyfox"); /* skin */
-						info.AddInt(1); /* use custom color */
-						info.AddInt(10346103); /* color body */
-						info.AddInt(65535); /* color feet */
-
+						// packets neccessary for connection
+						// https://ddnet.org/docs/libtw2/connection/
+						if (chunk.msgid == NETMSG_Game.SV_READYTOENTER) {
+							var Msg = new MsgPacker(15, true, 1); /* entergame */
+							this.SendMsgEx(Msg);
+						}
 					}
-					var crashmeplx = new MsgPacker(17, true, 1); // rcon
-					crashmeplx.AddString("crashmeplx"); // 64 player support message
-					this.SendMsgEx([info, crashmeplx]);
+				})
 
-
-
-				} else if (unpacked.chunks[0] && chunkMessages.includes("PING")) {
-					var info = new MsgPacker(23, true, 1);
-					this.SendMsgEx(info)
-				}
-				if (chunkMessages.includes("SNAP") || chunkMessages.includes("SNAP_EMPTY") || chunkMessages.includes("SNAP_SINGLE")) {
-					this.receivedSnaps++; /* wait for 2 ss before seeing self as connected */
-					if (this.receivedSnaps == 2) {
-						if (this.State != States.STATE_ONLINE)
-							this.emit('connected')
-						this.State = States.STATE_ONLINE;
-					}
-
-				}
+				
 				if (new Date().getTime() - this.time >= 1000 && this.State == States.STATE_ONLINE) {
 					this.time = new Date().getTime();
 					this.SendControlMsg(0);
@@ -811,5 +889,9 @@ export class Client extends EventEmitter {
 		return this.SnapUnpacker.deltas.filter(_delta => _delta.type_id == 10)
 			.sort((a, b) => a.id - b.id)
 			.map(player => player.parsed as PlayerInfo);
+	}
+
+	get VoteOptionList(): string[] {
+		return this.VoteList;
 	}
 }
