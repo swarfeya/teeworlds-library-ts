@@ -174,6 +174,12 @@ declare interface iMessage {
 	message: string
 }
 
+declare interface iEmoticon {
+	client_id: number,
+	emoticon: number,
+	author?: { ClientInfo?: ClientInfo, PlayerInfo?: PlayerInfo }
+}
+
 declare interface iKillMsg {
 	killer_id: number,
 	killer?: { ClientInfo?: ClientInfo, PlayerInfo?: PlayerInfo },
@@ -198,6 +204,7 @@ export declare interface Client {
 	on(event: 'connected', listener: () => void): this;
 	on(event: 'disconnect', listener: (reason: string) => void): this;
 
+	on(event: 'emote', listener: (message: iEmoticon) => void): this;
 	on(event: 'message', listener: (message: iMessage) => void): this;
 	on(event: 'broadcast', listener: (message: string) => void): this;
 	on(event: 'kill', listener: (kill: iKillMsg) => void): this;
@@ -724,6 +731,8 @@ export class Client extends EventEmitter {
 				}
 					} else { 
 						// game messages
+
+						// vote list:
 						if (chunk.msgid == NETMSG_Game.SV_VOTECLEAROPTIONS) {
 							this.VoteList = [];
 						} else if (chunk.msgid == NETMSG_Game.SV_VOTEOPTIONLISTADD) {
@@ -750,8 +759,25 @@ export class Client extends EventEmitter {
 							
 						}
 
+						// events
+						if (chunk.msgid == NETMSG_Game.SV_EMOTICON) {
+							let unpacker = new MsgUnpacker(chunk.raw.toJSON().data);
+							let unpacked = {
+								client_id: unpacker.unpackInt(),
+								emoticon: unpacker.unpackInt()
+							} as iEmoticon;
 
-						if (chunk.msgid == NETMSG_Game.SV_BROADCAST) {
+							if (unpacked.client_id != -1) {
+								unpacked.author = { 
+									ClientInfo: this.client_info(unpacked.client_id), 
+									PlayerInfo: this.player_info(unpacked.client_id) 
+								}
+							}
+							this.emit("emote", unpacked)
+
+							
+
+						} else if (chunk.msgid == NETMSG_Game.SV_BROADCAST) {
 							let unpacker = new MsgUnpacker(chunk.raw.toJSON().data);
 
 							this.emit("broadcast", unpacker.unpackString());
