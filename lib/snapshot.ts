@@ -309,7 +309,7 @@ export class Snapshot {
 		return checksum & 0xffffffff;
 	}
 
-	unpackSnapshot(snap: number[], deltatick: number, recvTick: number, WantedCrc: number) { 
+	unpackSnapshot(snap: Buffer, deltatick: number, recvTick: number, WantedCrc: number) { 
 		let unpacker = new MsgUnpacker(snap);
 		if (deltatick == -1) {
 			this.eSnapHolder = [];

@@ -543,10 +543,10 @@ export class Client extends EventEmitter {
 					return;
 				clearInterval(connectInterval)
 				
-				if (packet.toJSON().data[0] == 0x10) {
-					if (packet.toString().includes("TKEN") || packet.toJSON().data[3] == 0x2) {
+				if (packet[0] == 0x10) {
+					if (packet.toString().includes("TKEN") || packet[3] == 0x2) {
 						clearInterval(connectInterval);
-						this.TKEN = Buffer.from(packet.toJSON().data.slice(packet.toJSON().data.length - 4, packet.toJSON().data.length))
+						this.TKEN = packet.slice(-4)
 						this.SendControlMsg(3);
 						this.State = States.STATE_LOADING; // loading state
 						this.receivedSnaps = 0;
@@ -557,7 +557,7 @@ export class Client extends EventEmitter {
 
 						var client_version = new MsgPacker(0, true, 1);
 						client_version.AddBuffer(Buffer.from("8c00130484613e478787f672b3835bd4", 'hex'));
-						let randomUuid = Buffer.alloc(16);
+						let randomUuid = Buffer.allocUnsafe(16);
 
 						randomBytes(16).copy(randomUuid);
 
@@ -571,13 +571,13 @@ export class Client extends EventEmitter {
 						}
 		
 						this.SendMsgEx([client_version, info])
-					} else if (packet.toJSON().data[3] == 0x4) {
+					} else if (packet[3] == 0x4) {
 						// disconnected
 						this.State = States.STATE_OFFLINE;
-						let reason: string = (unpackString(packet.toJSON().data.slice(4)).result);
+						let reason: string = (unpackString(packet.slice(4)).result);
 						this.emit("disconnect", reason);
 					} 
-					if (packet.toJSON().data[3] !== 0x0) { // keepalive
+					if (packet[3] !== 0x0) { // keepalive
 						this.lastRecvTime = new Date().getTime();
 					}
 				} else {
@@ -672,7 +672,7 @@ export class Client extends EventEmitter {
 						this.PredGameTick = this.AckGameTick + 1;
 
 					// snapChunks.forEach(chunk => {
-						let unpacker = new MsgUnpacker(chunk.raw.toJSON().data);
+						let unpacker = new MsgUnpacker(chunk.raw);
 			
 						let NumParts = 1;
 						let Part = 0;
@@ -703,7 +703,7 @@ export class Client extends EventEmitter {
 							}
 
 							// chunk.raw = Buffer.from(unpacker.remaining);
-							this.snaps[Part] = Buffer.from(unpacker.remaining);
+							this.snaps[Part] = unpacker.remaining;
 
 							this.SnapshotParts |= 1 << Part;
 							
@@ -711,7 +711,7 @@ export class Client extends EventEmitter {
 								let mergedSnaps = Buffer.concat(this.snaps);
 								this.SnapshotParts = 0;
 
-								let snapUnpacked = this.SnapUnpacker.unpackSnapshot(mergedSnaps.toJSON().data, DeltaTick, GameTick, Crc);
+								let snapUnpacked = this.SnapUnpacker.unpackSnapshot(mergedSnaps, DeltaTick, GameTick, Crc);
 								
 								this.emit("snapshot");
 								this.AckGameTick = snapUnpacked.recvTick;
@@ -736,7 +736,7 @@ export class Client extends EventEmitter {
 						if (chunk.msgid == NETMSG_Game.SV_VOTECLEAROPTIONS) {
 							this.VoteList = [];
 						} else if (chunk.msgid == NETMSG_Game.SV_VOTEOPTIONLISTADD) {
-							let unpacker = new MsgUnpacker(chunk.raw.toJSON().data)
+							let unpacker = new MsgUnpacker(chunk.raw)
 							let NumOptions = unpacker.unpackInt()
 							let list: string[] = [];
 							for (let i = 0; i < 15; i++) {
@@ -746,11 +746,11 @@ export class Client extends EventEmitter {
 
 							this.VoteList.push(...list);
 						} else if (chunk.msgid == NETMSG_Game.SV_VOTEOPTIONADD) {
-							let unpacker = new MsgUnpacker(chunk.raw.toJSON().data)
+							let unpacker = new MsgUnpacker(chunk.raw)
 							
 							this.VoteList.push(unpacker.unpackString());
 						} else if (chunk.msgid == NETMSG_Game.SV_VOTEOPTIONREMOVE) {
-							let unpacker = new MsgUnpacker(chunk.raw.toJSON().data)
+							let unpacker = new MsgUnpacker(chunk.raw)
 							
 							let index = this.VoteList.indexOf(unpacker.unpackString());
 
@@ -761,7 +761,7 @@ export class Client extends EventEmitter {
 
 						// events
 						if (chunk.msgid == NETMSG_Game.SV_EMOTICON) {
-							let unpacker = new MsgUnpacker(chunk.raw.toJSON().data);
+							let unpacker = new MsgUnpacker(chunk.raw);
 							let unpacked = {
 								client_id: unpacker.unpackInt(),
 								emoticon: unpacker.unpackInt()
@@ -778,11 +778,11 @@ export class Client extends EventEmitter {
 							
 
 						} else if (chunk.msgid == NETMSG_Game.SV_BROADCAST) {
-							let unpacker = new MsgUnpacker(chunk.raw.toJSON().data);
+							let unpacker = new MsgUnpacker(chunk.raw);
 
 							this.emit("broadcast", unpacker.unpackString());
 						} if (chunk.msgid == NETMSG_Game.SV_CHAT) {
-							let unpacker = new MsgUnpacker(chunk.raw.toJSON().data);
+							let unpacker = new MsgUnpacker(chunk.raw);
 							let unpacked: iMessage = {
 								team: unpacker.unpackInt(),
 								client_id: unpacker.unpackInt(),
@@ -798,7 +798,7 @@ export class Client extends EventEmitter {
 							this.emit("message", unpacked)
 						} else if (chunk.msgid == NETMSG_Game.SV_KILLMSG) {
 							let unpacked: iKillMsg = {} as iKillMsg;
-							let unpacker = new MsgUnpacker(chunk.raw.toJSON().data);
+							let unpacker = new MsgUnpacker(chunk.raw);
 							unpacked.killer_id = unpacker.unpackInt();
 							unpacked.victim_id = unpacker.unpackInt();
 							unpacked.weapon = unpacker.unpackInt();
@@ -811,7 +811,7 @@ export class Client extends EventEmitter {
 								unpacked.killer = { ClientInfo: this.client_info(unpacked.killer_id), PlayerInfo: this.player_info(unpacked.killer_id) }
 							this.emit("kill", unpacked)
 						} else if (chunk.msgid == NETMSG_Game.SV_MOTD) {
-							let unpacker = new MsgUnpacker(chunk.raw.toJSON().data);
+							let unpacker = new MsgUnpacker(chunk.raw);
 							let message = unpacker.unpackString();
 							this.emit("motd", message);
 						}

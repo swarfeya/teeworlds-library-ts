@@ -1,5 +1,5 @@
 const decoder = new TextDecoder('utf-8');
-export function unpackInt(pSrc: number[]): {result: number, remaining: number[]} {
+export function unpackInt(pSrc: Buffer): {result: number, remaining: Buffer} {
 	
 	var srcIndex = 0;
 	const sign = ((pSrc[srcIndex] >> 6) & 1)
@@ -18,15 +18,15 @@ export function unpackInt(pSrc: number[]): {result: number, remaining: number[]}
 	
 	return {result, remaining: pSrc.slice(srcIndex+1)};
 }
-export function unpackString(pSrc: number[]): {result: string, remaining: number[]} {
+export function unpackString(pSrc: Buffer): {result: string, remaining: Buffer} {
 	var result = pSrc.slice(0, pSrc.indexOf(0))
 	pSrc = pSrc.slice(pSrc.indexOf(0) + 1, pSrc.length)
 	return {result: decoder.decode(new Uint8Array(result)), remaining: pSrc}
 }
 
 export class MsgUnpacker {
-	remaining: number[];
-	constructor(pSrc: number[]) {
+	remaining: Buffer;
+	constructor(pSrc: Buffer) {
 		this.remaining = pSrc;
 	}
 
