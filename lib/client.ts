@@ -348,7 +348,7 @@ export class Client extends EventEmitter {
 			chunk.msg = messageTypes[packet[0] & 1][chunk.msgid];
 			chunk.raw = packet.slice(1, chunk.bytes)
 			Object.values(messageUUIDs).forEach((a, i) => {
-				if (a.compare(packet.slice(0, 16)) == 0) {
+				if (a.byteLength >= 16 && a.compare(packet.slice(0, 16)) == 0) {
 					chunk.extended_msgid = a;
 					chunk.msg = Object.keys(messageUUIDs)[i];
 				}
@@ -477,7 +477,7 @@ export class Client extends EventEmitter {
 		chunk.msg = messageTypes[packet[0]&1][chunk.msgid];
 		chunk.raw = packet.slice(1, chunk.bytes)
 		Object.values(messageUUIDs).forEach((a, i) => {
-			if (a.compare(packet.slice(0, 16)) === 0) {
+			if (a.byteLength >= 16 && a.compare(packet.slice(0, 16)) === 0) {
 				chunk.extended_msgid = a;
 				chunk.msg = Object.keys(messageUUIDs)[i];
 			}
@@ -611,8 +611,9 @@ export class Client extends EventEmitter {
 
 				})
 				this.sentChunkQueue.forEach((buff, i) => {
-					let chunk = this.MsgToChunk(buff);
-					if (chunk.flags & 1) {
+					let chunkFlags = (buff[0] >> 6) & 3;
+					if (chunkFlags & 1) {
+						let chunk = this.MsgToChunk(buff);
 						if (chunk.seq && chunk.seq >= this.ack)
 							this.sentChunkQueue.splice(i, 1);
 					} 
@@ -682,12 +683,12 @@ export class Client extends EventEmitter {
 						let Crc = 0;
 						let CompleteSize = 0;
 
-						if (chunk.msg == "SNAP") {
+						if (chunk.msgid == NETMSG_Sys.NETMSG_SNAP) {
 							NumParts = unpacker.unpackInt();
 							Part = unpacker.unpackInt();
 						}	
 
-						if (chunk.msg != "SNAP_EMPTY") {
+						if (chunk.msgid != NETMSG_Sys.NETMSG_SNAPEMPTY) {
 							Crc = unpacker.unpackInt();
 							PartSize = unpacker.unpackInt();
 						}
@@ -843,22 +844,17 @@ export class Client extends EventEmitter {
 		inputMsg.AddInt(this.PredGameTick);
 		inputMsg.AddInt(40);
 
-		let input_data = [
-
-			input.m_Direction,
-			input.m_TargetX,
-			input.m_TargetY,
-			input.m_Jump,
-			input.m_Fire,
-			input.m_Hook,
-			input.m_PlayerFlags,
-			input.m_WantedWeapon,
-			input.m_NextWeapon,
-			input.m_PrevWeapon
-		]
-		input_data.forEach(a => {
-			inputMsg.AddInt(a);
-		});
+		inputMsg.AddInt(input.m_Direction)
+		inputMsg.AddInt(input.m_TargetX)
+		inputMsg.AddInt(input.m_TargetY)
+		inputMsg.AddInt(input.m_Jump)
+		inputMsg.AddInt(input.m_Fire)
+		inputMsg.AddInt(input.m_Hook)
+		inputMsg.AddInt(input.m_PlayerFlags)
+		inputMsg.AddInt(input.m_WantedWeapon)
+		inputMsg.AddInt(input.m_NextWeapon)
+		inputMsg.AddInt(input.m_PrevWeapon)
+		
 		this.SendMsgEx(inputMsg);
 	}
 	get input() {

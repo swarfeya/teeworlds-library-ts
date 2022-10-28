@@ -1,28 +1,51 @@
 import { MsgUnpacker } from "./MsgUnpacker";
 var decoder = new TextDecoder('utf-8');
 
-export const itemAppendix: {"type_id": number, "size": number, "name": string}[] = [
-	{"type_id": 0, "size": 0, "name": "obj_ex"},
-	{"type_id": 1, "size": 10, "name": "obj_player_input"},
-	{"type_id": 2, "size": 6, "name": "obj_projectile"},
-	{"type_id": 3, "size": 5, "name": "obj_laser"},
-	{"type_id": 4, "size": 4, "name": "obj_pickup"},
-	{"type_id": 5, "size": 3, "name": "obj_flag"},
-	{"type_id": 6, "size": 8, "name": "obj_game_info"},
-	{"type_id": 7, "size": 4, "name": "obj_game_data"},
-	{"type_id": 8, "size": 15, "name": "obj_character_core"},
-	{"type_id": 9, "size": 22, "name": "obj_character"},
-	{"type_id": 10, "size": 5, "name": "obj_player_info"},
-	{"type_id": 11, "size": 17, "name": "obj_client_info"},
-	{"type_id": 12, "size": 3, "name": "obj_spectator_info"},
-	{"type_id": 13, "size": 2, "name": "event_common"},
-	{"type_id": 14, "size": 2, "name": "event_explosion"},
-	{"type_id": 15, "size": 2, "name": "event_spawn"},
-	{"type_id": 16, "size": 2, "name": "event_hammerhit"},
-	{"type_id": 17, "size": 3, "name": "event_death"},
-	{"type_id": 18, "size": 3, "name": "event_sound_global"},
-	{"type_id": 19, "size": 3, "name": "event_sound_world"},
-	{"type_id": 20, "size": 3, "name": "event_damage_indicator"}
+// export const itemAppendix: {"type_id": number, "size": number, "name": string}[] = [
+// 	{"type_id": 0, "size": 0, "name": "obj_ex"},
+// 	{"type_id": 1, "size": 10, "name": "obj_player_input"},
+// 	{"type_id": 2, "size": 6, "name": "obj_projectile"},
+// 	{"type_id": 3, "size": 5, "name": "obj_laser"},
+// 	{"type_id": 4, "size": 4, "name": "obj_pickup"},
+// 	{"type_id": 5, "size": 3, "name": "obj_flag"},
+// 	{"type_id": 6, "size": 8, "name": "obj_game_info"},
+// 	{"type_id": 7, "size": 4, "name": "obj_game_data"},
+// 	{"type_id": 8, "size": 15, "name": "obj_character_core"},
+// 	{"type_id": 9, "size": 22, "name": "obj_character"},
+// 	{"type_id": 10, "size": 5, "name": "obj_player_info"},
+// 	{"type_id": 11, "size": 17, "name": "obj_client_info"},
+// 	{"type_id": 12, "size": 3, "name": "obj_spectator_info"},
+// 	{"type_id": 13, "size": 2, "name": "event_common"},
+// 	{"type_id": 14, "size": 2, "name": "event_explosion"},
+// 	{"type_id": 15, "size": 2, "name": "event_spawn"},
+// 	{"type_id": 16, "size": 2, "name": "event_hammerhit"},
+// 	{"type_id": 17, "size": 3, "name": "event_death"},
+// 	{"type_id": 18, "size": 3, "name": "event_sound_global"},
+// 	{"type_id": 19, "size": 3, "name": "event_sound_world"},
+// 	{"type_id": 20, "size": 3, "name": "event_damage_indicator"}
+// ]
+const itemAppendix: number[] = [
+	0,
+	10,
+	6,
+	5,
+	4,
+	3,
+	8,
+	4,
+	15,
+	22,
+	5,
+	17,
+	3,
+	2,
+	2,
+	2,
+	2,
+	3,
+	3,
+	3,
+	3,
 ]
 
 export enum items {
@@ -299,33 +322,47 @@ export class Snapshot {
 		return _item;
 	}
 
-	crc(tick: number) {
+	crc() {
 		var checksum = 0;
-		this.eSnapHolder.forEach(snap => {
-			if (snap.ack == tick)
-				snap.Snapshot.Data.forEach(el => checksum += el);
+		// this.eSnapHolder.forEach(snap => {
+		// 	if (snap.ack == tick)
+		// 		snap.Snapshot.Data.forEach(el => checksum += el);
+		// })
+		this.deltas.forEach(snap => {
+			// if (snap.ack == tick)
+				snap.data.forEach(el => checksum += el);
 		})
 
 		return checksum & 0xffffffff;
 	}
-
 	unpackSnapshot(snap: Buffer, deltatick: number, recvTick: number, WantedCrc: number) { 
 		let unpacker = new MsgUnpacker(snap);
+		let deltaSnaps: eSnap[] = [];
 		if (deltatick == -1) {
 			this.eSnapHolder = [];
 			this.deltas = [];
 		} else {
-			this.eSnapHolder = this.eSnapHolder.filter(a => a.ack >= deltatick)
+			this.eSnapHolder = this.eSnapHolder.filter(a => {
+				if (a.ack == deltatick)
+					deltaSnaps.push(a);
+				return a.ack >= deltatick
+			})
+			// if (deltatick != -1 && this.eSnapHolder.length == 0) {
+				// console.log("no deltatick stored")
+				// return {items: [], recvTick: -1}
+			// }
 		}
 		if (snap.length == 0) {
 			// empty snap, copy old one into new ack
 			this.eSnapHolder.forEach(snap => {
-				if (snap.ack == deltatick)
+				if (snap.ack == deltatick) 
 					this.eSnapHolder.push({Snapshot: snap.Snapshot, ack: recvTick});
 
 			})
 			return {items: [], recvTick: recvTick};
 		}
+		let oldDeltas = this.deltas;
+		this.deltas = [];
 		/* key = (((type_id) << 16) | (id))
 		* key_to_id = ((key) & 0xffff)
 		* key_to_type_id = ((key >> 16) & 0xffff) 
@@ -348,22 +385,21 @@ export class Snapshot {
 		for (let i = 0; i < num_removed_items; i++) {
 			let deleted_key = unpacker.unpackInt(); // removed_item_keys
 			// let index = this.deltas.map(delta => delta.key).indexOf(deleted_key);
-			let index = this.deltas.findIndex(delta => delta.key === deleted_key);
-			if (index > -1)
-				this.deltas.splice(index, 1);
+			// let index = this.deltas.findIndex(delta => delta.key === deleted_key);
+			// if (index > -1)
+				// this.deltas.splice(index, 1);
+				// console.log(deleted_key)
 			deleted.push(deleted_key)
 		}
-		if (deleted.length) 
-			this.eSnapHolder = this.eSnapHolder.filter(a => !deleted.includes(a.Snapshot.Key));
-		
 		/*item_delta:
 			[ 4] type_id
 			[ 4] id
 			[ 4] _size
 			[*4] data_delta*/
 
-		let items: {'items': {'data': number[], 'parsed': Item, 'type_id': number, 'id': number, 'key': number}[]/*, 'client_infos': client_info[], 'player_infos': player_info[]*/, lost: number} = {items: [],/* client_infos: client_infos, player_infos: player_infos,*/ lost: 0};
-		let deltaSnaps = this.eSnapHolder.filter(a => a.ack === deltatick);
+		// let items: {'items': {'data': number[], 'type_id': number, 'id': number, 'key': number}[]/*, 'client_infos': client_info[], 'player_infos': player_info[]*/, lost: number} = {items: [],/* client_infos: client_infos, player_infos: player_infos,*/ lost: 0};
+		
+		// let deltaSnaps = this.eSnapHolder.filter(a => a.ack === deltatick);
 
 		if (deltaSnaps.length == 0 && deltatick >= 0) {
 			return {items: [], recvTick: -1};
@@ -377,50 +413,121 @@ export class Snapshot {
 
 			let _size;
 			if (type_id > 0 && type_id < itemAppendix.length) {
-				_size = itemAppendix[type_id].size;
+				_size = itemAppendix[type_id];
 			} else
 				_size = unpacker.unpackInt();
 
 			let data: number[] = [];
 			for (let j = 0; j < _size; j++) {
-				if (unpacker.remaining.length > 0) 
-					data.push(unpacker.unpackInt());
+				// if (unpacker.remaining.length > 0)  {
+					data[j] = (unpacker.unpackInt());
+				// } else console.log(_size, "???")
 			}
+			let changed = false;
 			if (deltatick >= 0) { 
 				// let index = deltaSnaps.map(delta => delta.Snapshot.Key).indexOf(key)
-				let index = deltaSnaps.findIndex(delta => delta.Snapshot.Key === key);
-				if (index > -1) {
-				
-					let out = UndiffItem(deltaSnaps[index].Snapshot.Data, data)
+				let delta = deltaSnaps.find(delta => delta.Snapshot.Key === key);
+				if (delta !== undefined) {
+					let out = UndiffItem(delta.Snapshot.Data, data)
 					data = out;
+					changed = true;
 				} // else no previous, use new data
 			} 
+			let parsed: Item;
+			if (!changed) {
+				let oldDelta = oldDeltas.find(delta => delta.key == key); 
+				if (oldDelta !== undefined && compareArrays(data, oldDelta.data)) {
+					parsed = oldDelta.parsed;
 
-			let parsed = this.parseItem(data, type_id, id)
+				} else 
+					parsed = this.parseItem(data, type_id, id)
+					
+			} else 
+				parsed = this.parseItem(data, type_id, id)
+			
 			this.eSnapHolder.push({Snapshot: {Data: data, Key: key}, ack: recvTick});
 
-			items.items.push({data, parsed, type_id, id, key})
+			// items.items.push({data, type_id, id, key})
+		
+			this.deltas.push({
+				data, 
+				key, 
+				id, 
+				type_id, 
+				parsed
+			});
+		
 
 
 
 		}
+		// if (deleted.length) {
+			// let _beforeLength = this.eSnapHolder.length;
+			// this.eSnapHolder = this.eSnapHolder.filter(snap => !deleted.includes(snap.Snapshot.Key));
+			// let _beforeLength = this.eSnapHolder.length;
+			// if ((_beforeLength - this.eSnapHolder.length) !== num_removed_items) {
+				// console.log("remove!", (_beforeLength - this.eSnapHolder.length) == num_removed_items, (_beforeLength - this.eSnapHolder.length), num_removed_items, WantedCrc)
+
+			// }
+		// }
+		
 		for (let newSnap of deltaSnaps) {
+			if (deleted.includes(newSnap.Snapshot.Key)) {
+				// if ()
+				// this.deltas = this.deltas.filter(a => !deleted.includes(a.key))
+				continue;
+			}
 			if (this.eSnapHolder.findIndex(a => a.ack == recvTick && a.Snapshot.Key == newSnap.Snapshot.Key) === -1) { // ugly copy new snap to eSnapHolder (if it isnt pushed already)
 				this.eSnapHolder.push({Snapshot: {Data: newSnap.Snapshot.Data, Key: newSnap.Snapshot.Key}, ack: recvTick});
-			}
-			if (deltatick > -1) {
-				let ____index = this.deltas.findIndex(delta => delta.key == newSnap.Snapshot.Key)
+				// this.deltas.push({})
+				// if (deltatick > -1) {
+				// 	let ____index = this.deltas.findIndex(delta => delta.key == newSnap.Snapshot.Key)
 				
-				if (____index > -1) {
-					this.deltas[____index] = {data: newSnap.Snapshot.Data, key: newSnap.Snapshot.Key, id: newSnap.Snapshot.Key & 0xffff, type_id: ((newSnap.Snapshot.Key >> 16) & 0xffff), parsed: this.parseItem(newSnap.Snapshot.Data, ((newSnap.Snapshot.Key >> 16) & 0xffff), ((newSnap.Snapshot.Key) & 0xffff))};
-					continue;
-				} 
-			} // else
-			this.deltas.push({data: newSnap.Snapshot.Data, key: newSnap.Snapshot.Key, id: newSnap.Snapshot.Key & 0xffff, type_id: ((newSnap.Snapshot.Key >> 16) & 0xffff), parsed: this.parseItem(newSnap.Snapshot.Data, ((newSnap.Snapshot.Key >> 16) & 0xffff), ((newSnap.Snapshot.Key) & 0xffff))});
+				// 	if (____index > -1) {
+				// 		this.deltas[____index] = {
+				// 			data: newSnap.Snapshot.Data, 
+				// 			key: newSnap.Snapshot.Key, 
+				// 			id: newSnap.Snapshot.Key & 0xffff, 
+				// 			type_id: ((newSnap.Snapshot.Key >> 16) & 0xffff), 
+				// 			parsed: this.parseItem(newSnap.Snapshot.Data, ((newSnap.Snapshot.Key >> 16) & 0xffff), ((newSnap.Snapshot.Key) & 0xffff))
+				// 		};
+				// 		continue;
+				// 	} 
+				// // }
+				let oldDelta = oldDeltas.find(delta => delta.key == newSnap.Snapshot.Key); 
+				if (oldDelta !== undefined && compareArrays(newSnap.Snapshot.Data, oldDelta.data)) {
+					this.deltas.push(oldDelta);
+
+				} else {
+					this.deltas.push({
+						data: newSnap.Snapshot.Data, 
+						key: newSnap.Snapshot.Key, 
+						id: newSnap.Snapshot.Key & 0xffff, 
+						type_id: ((newSnap.Snapshot.Key >> 16) & 0xffff), 
+						parsed: this.parseItem(newSnap.Snapshot.Data, ((newSnap.Snapshot.Key >> 16) & 0xffff), ((newSnap.Snapshot.Key) & 0xffff))
+					});
+
+				}
+			}
 		}
-		
-		if (this.crc(recvTick) !== WantedCrc) {
+		// if (items.items.length != num_item_deltas)
+			// console.log("length", items.items.length, num_item_deltas, items.items.length - num_item_deltas, WantedCrc)
+		/* this.deltas = [];
+		for (let newSnap of this.eSnapHolder) {
+			if (newSnap.ack == recvTick)
+				this.deltas.push({
+					data: newSnap.Snapshot.Data, 
+					key: newSnap.Snapshot.Key, 
+					id: newSnap.Snapshot.Key & 0xffff, 
+					type_id: ((newSnap.Snapshot.Key >> 16) & 0xffff), 
+					parsed: this.parseItem(newSnap.Snapshot.Data, ((newSnap.Snapshot.Key >> 16) & 0xffff), ((newSnap.Snapshot.Key) & 0xffff))
+				});	
+			}*/
+		let _crc = this.crc();
+		if (_crc !== WantedCrc) {
+			this.deltas = oldDeltas;
 			this.crc_errors++;
+			console.log("crc error", _crc, WantedCrc, this.crc_errors)
 			if (this.crc_errors > 5) {
 				recvTick = -1;
 				this.crc_errors = 0;
@@ -432,9 +539,23 @@ export class Snapshot {
 			}
 		} else if (this.crc_errors > 0)
 			this.crc_errors--;
-		
-		return {items, recvTick};
+		// let filterLength = this.eSnapHolder.filter(a => a.ack == recvTick).length
+		// if (this.deltas.length !== filterLength) {
+			// this.deltas = this.deltas.filter(a => !deleted.includes(a.key))
+			// console.log(this.deltas.length, filterLength, this.deltas.length - filterLength, num_item_deltas )
+		// }
+	
+		return {items: this.deltas, recvTick};
 	}
+}
+function compareArrays(first: number[], second: number[]) {
+	if (first.length !== second.length)
+		return false;
+	for (var i = 0; i < first.length; i++) {
+		if (first[i] !== second[i])
+			return false;
+	}
+	return true;
 }
 
 function UndiffItem(oldItem: number[], newItem: number[]): number[] {
@@ -445,6 +566,7 @@ function UndiffItem(oldItem: number[], newItem: number[]): number[] {
 		if (a !== undefined && out[i] !== undefined) {
 			out[i] += a;
 		} else {
+			console.log("UNDEFINED UNDEFINED UNDEFINED")
 			out[i] = 0;
 		}
 	})

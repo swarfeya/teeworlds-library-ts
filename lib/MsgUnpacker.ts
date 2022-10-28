@@ -30,16 +30,16 @@ export class MsgUnpacker {
 		this.remaining = pSrc;
 	}
 
-	unpackInt(_unpacked = false): number {
-		let unpacked;
-		if (!_unpacked)  {
-			unpacked = unpackInt(this.remaining);
-			this.remaining = unpacked.remaining;
-		} else {
-			unpacked = {result: this.remaining[0]};
-			this.remaining = this.remaining.slice(1);
+	unpackInt(): number {
+		// let unpacked;
+		// if (!_unpacked)  {
+		let unpacked = unpackInt(this.remaining);
+		this.remaining = unpacked.remaining;
+		// } else {
+			// unpacked = {result: this.remaining[0]};
+			// this.remaining = this.remaining.slice(1);
 
-		}
+		// }
 		return unpacked.result;
 	}
 
