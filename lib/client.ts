@@ -8,9 +8,10 @@ import { unpackString, MsgUnpacker } from "./MsgUnpacker";
 import Movement from './movement';
 
 import { MsgPacker } from './MsgPacker';
-import { Snapshot } from './snapshot';
+import { Item, Snapshot } from './snapshot';
 import Huffman from "./huffman";
 import { Game } from "./components/game";
+import { SnapshotWrapper } from "./components/snapshot";
 
 const huff = new Huffman();
 
@@ -198,6 +199,7 @@ export declare interface Client {
 	on(event: 'kill', listener: (kill: iKillMsg) => void): this;
 	on(event: 'motd', listener: (message: string) => void): this;
 	
+	on(event: 'snapshot', listener: (items: Item[]) => void): this;
 }
 
 export class Client extends EventEmitter {
@@ -213,6 +215,8 @@ export class Client extends EventEmitter {
 	private TKEN: Buffer;
 	private time: number;
 	private SnapUnpacker: Snapshot;
+
+	public SnapshotUnpacker: SnapshotWrapper;
 
 	private PredGameTick: number;
 	private AckGameTick: number;
@@ -253,7 +257,7 @@ export class Client extends EventEmitter {
 
 		this.SnapshotParts = 0;
 		
-		this.SnapUnpacker = new Snapshot();
+		this.SnapUnpacker = new Snapshot(this);
 		// this.eSnapHolder = [];
 		this.requestResend = false;
 		
@@ -284,6 +288,7 @@ export class Client extends EventEmitter {
 		this.movement = new Movement();
 		
 		this.game = new Game(this);
+		this.SnapshotUnpacker = new SnapshotWrapper(this);
 
 
 	}
@@ -707,7 +712,7 @@ export class Client extends EventEmitter {
 
 								let snapUnpacked = this.SnapUnpacker.unpackSnapshot(mergedSnaps, DeltaTick, GameTick, Crc);
 								
-								this.emit("snapshot");
+								this.emit("snapshot", snapUnpacked.items);
 								this.AckGameTick = snapUnpacked.recvTick;
 								if (Math.abs(this.PredGameTick - this.AckGameTick) > 10)
 									this.PredGameTick = this.AckGameTick + 1;
@@ -763,8 +768,8 @@ export class Client extends EventEmitter {
 
 							if (unpacked.client_id != -1) {
 								unpacked.author = { 
-									ClientInfo: this.client_info(unpacked.client_id), 
-									PlayerInfo: this.player_info(unpacked.client_id) 
+									ClientInfo: this.SnapshotUnpacker.getObjClientInfo(unpacked.client_id), 
+									PlayerInfo: this.SnapshotUnpacker.getObjPlayerInfo(unpacked.client_id) 
 								}
 							}
 							this.emit("emote", unpacked)
@@ -785,8 +790,8 @@ export class Client extends EventEmitter {
 
 							if (unpacked.client_id != -1) {
 								unpacked.author = { 
-									ClientInfo: this.client_info(unpacked.client_id), 
-									PlayerInfo: this.player_info(unpacked.client_id) 
+									ClientInfo: this.SnapshotUnpacker.getObjClientInfo(unpacked.client_id), 
+									PlayerInfo: this.SnapshotUnpacker.getObjPlayerInfo(unpacked.client_id) 
 								}
 							}
 							this.emit("message", unpacked)
@@ -798,11 +803,11 @@ export class Client extends EventEmitter {
 							unpacked.weapon = unpacker.unpackInt();
 							unpacked.special_mode = unpacker.unpackInt();
 							if (unpacked.victim_id != -1 && unpacked.victim_id < 64) {
-								unpacked.victim = { ClientInfo: this.client_info(unpacked.victim_id), PlayerInfo: this.player_info(unpacked.victim_id) }
+								unpacked.victim = { ClientInfo: this.SnapshotUnpacker.getObjClientInfo(unpacked.victim_id), PlayerInfo: this.SnapshotUnpacker.getObjPlayerInfo(unpacked.victim_id) }
 
 							}
 							if (unpacked.killer_id != -1 && unpacked.killer_id < 64)
-								unpacked.killer = { ClientInfo: this.client_info(unpacked.killer_id), PlayerInfo: this.player_info(unpacked.killer_id) }
+								unpacked.killer = { ClientInfo: this.SnapshotUnpacker.getObjClientInfo(unpacked.killer_id), PlayerInfo: this.SnapshotUnpacker.getObjPlayerInfo(unpacked.killer_id) }
 							this.emit("kill", unpacked)
 						} else if (chunk.msgid == NETMSG_Game.SV_MOTD) {
 							let unpacker = new MsgUnpacker(chunk.raw);
@@ -870,49 +875,11 @@ export class Client extends EventEmitter {
 		})
 	}
 
-	
-	/** Get the client_info from a specific player id. */
-	client_info(id: number) { 
-		let delta = this.SnapUnpacker.deltas.filter(_delta => 
-			_delta.type_id == 11 
-			&& _delta.id == id
-		);
-
-		if (delta.length == 0)
-			return undefined;
-		return delta[0].parsed as ClientInfo;
-			// .sort((a, b) => a.id - b.id)
-			// .map(a => a.parsed as ClientInfo);
-	}
-
-	
-	/** Get all client infos. */
-	get client_infos(): ClientInfo[] { 
-		return this.SnapUnpacker.deltas.filter(_delta => _delta.type_id == 11)
-		.sort((a, b) => a.id - b.id)
-		.map(a => a.parsed as ClientInfo);
-	}
-	
-	/** Get the player info from a specific player id. */
-	player_info(id: number) { 
-		let delta = this.SnapUnpacker.deltas.filter(_delta => 
-			_delta.type_id == 10
-			&& _delta.id == id
-		);
-
-		if (delta.length == 0)
-			return undefined;
-		return delta[0].parsed as PlayerInfo;
-	}
-
-	/**  Get all player infos. */
-	get player_infos(): PlayerInfo[] { 
-		return this.SnapUnpacker.deltas.filter(_delta => _delta.type_id == 10)
-			.sort((a, b) => a.id - b.id)
-			.map(player => player.parsed as PlayerInfo);
-	}
 	/** Get all available vote options (for example for map voting) */
 	get VoteOptionList(): string[] { 
 		return this.VoteList;
+	}
+	get rawSnapUnpacker(): Snapshot {
+		return this.SnapUnpacker;
 	}
 }

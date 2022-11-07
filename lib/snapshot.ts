@@ -1,29 +1,30 @@
+import { Client } from "./client";
 import { MsgUnpacker } from "./MsgUnpacker";
 var decoder = new TextDecoder('utf-8');
 
-// export const itemAppendix: {"type_id": number, "size": number, "name": string}[] = [
-// 	{"type_id": 0, "size": 0, "name": "obj_ex"},
-// 	{"type_id": 1, "size": 10, "name": "obj_player_input"},
-// 	{"type_id": 2, "size": 6, "name": "obj_projectile"},
-// 	{"type_id": 3, "size": 5, "name": "obj_laser"},
-// 	{"type_id": 4, "size": 4, "name": "obj_pickup"},
-// 	{"type_id": 5, "size": 3, "name": "obj_flag"},
-// 	{"type_id": 6, "size": 8, "name": "obj_game_info"},
-// 	{"type_id": 7, "size": 4, "name": "obj_game_data"},
-// 	{"type_id": 8, "size": 15, "name": "obj_character_core"},
-// 	{"type_id": 9, "size": 22, "name": "obj_character"},
-// 	{"type_id": 10, "size": 5, "name": "obj_player_info"},
-// 	{"type_id": 11, "size": 17, "name": "obj_client_info"},
-// 	{"type_id": 12, "size": 3, "name": "obj_spectator_info"},
-// 	{"type_id": 13, "size": 2, "name": "event_common"},
-// 	{"type_id": 14, "size": 2, "name": "event_explosion"},
-// 	{"type_id": 15, "size": 2, "name": "event_spawn"},
-// 	{"type_id": 16, "size": 2, "name": "event_hammerhit"},
-// 	{"type_id": 17, "size": 3, "name": "event_death"},
-// 	{"type_id": 18, "size": 3, "name": "event_sound_global"},
-// 	{"type_id": 19, "size": 3, "name": "event_sound_world"},
-// 	{"type_id": 20, "size": 3, "name": "event_damage_indicator"}
-// ]
+const ___itemAppendix: {"type_id": number, "size": number, "name": string}[] = [ // only used for the events underneath. the actual itemAppendix below this is only used for size
+	{"type_id": 0, "size": 0, "name": "obj_ex"},
+	{"type_id": 1, "size": 10, "name": "obj_player_input"},
+	{"type_id": 2, "size": 6, "name": "obj_projectile"},
+	{"type_id": 3, "size": 5, "name": "obj_laser"},
+	{"type_id": 4, "size": 4, "name": "obj_pickup"},
+	{"type_id": 5, "size": 3, "name": "obj_flag"},
+	{"type_id": 6, "size": 8, "name": "obj_game_info"},
+	{"type_id": 7, "size": 4, "name": "obj_game_data"},
+	{"type_id": 8, "size": 15, "name": "obj_character_core"},
+	{"type_id": 9, "size": 22, "name": "obj_character"},
+	{"type_id": 10, "size": 5, "name": "obj_player_info"},
+	{"type_id": 11, "size": 17, "name": "obj_client_info"},
+	{"type_id": 12, "size": 3, "name": "obj_spectator_info"},
+	{"type_id": 13, "size": 2, "name": "common"}, // event_common
+	{"type_id": 14, "size": 2, "name": "explosion"}, // event_explosion
+	{"type_id": 15, "size": 2, "name": "spawn"}, // event_spawn
+	{"type_id": 16, "size": 2, "name": "hammerhit"}, // event_hammerhit
+	{"type_id": 17, "size": 3, "name": "death"}, // event_death
+	{"type_id": 18, "size": 3, "name": "sound_global"}, // event_sound_global
+	{"type_id": 19, "size": 3, "name": "sound_world"}, // event_sound_world
+	{"type_id": 20, "size": 3, "name": "damage_indicator"} // event_damage_indicator
+]
 const itemAppendix: number[] = [
 	0,
 	10,
@@ -72,7 +73,7 @@ export enum items {
 	EVENT_DAMAGE_INDICATOR
 }
 
-export type Item = PlayerInput | PlayerInfo | Projectile | Laser | Pickup | Flag | GameInfo | GameData | CharacterCore | Character | PlayerInfo | ClientInfo | SpectatorInfo | Common | Explosion | Spawn |HammerHit | Death | SoundGlobal | SoundWorld | DamageInd | DdnetCharacter;
+export declare type Item = PlayerInput | PlayerInfo | Projectile | Laser | Pickup | Flag | GameInfo | GameData | CharacterCore | Character | PlayerInfo | ClientInfo | SpectatorInfo | Common | Explosion | Spawn |HammerHit | Death | SoundGlobal | SoundWorld | DamageInd | DdnetCharacter;
 interface eSnap {
 	Snapshot: {Key: number, Data: number[]},
 	ack: number,
@@ -81,7 +82,12 @@ export class Snapshot {
 	deltas: {'data': number[], 'parsed': Item, 'type_id': number, 'id': number, 'key': number}[] = [];
 	eSnapHolder: eSnap[] = [];
 	crc_errors: number = 0;
+	client: Client;
 
+	constructor(_client: Client) {
+		this.client = _client;
+	}
+	
 	private IntsToStr(pInts: number[]): string {
 		var pIntz: number[] = [];
 		// var pStr = ''
@@ -347,10 +353,6 @@ export class Snapshot {
 					deltaSnaps.push(a);
 				return a.ack >= deltatick
 			})
-			// if (deltatick != -1 && this.eSnapHolder.length == 0) {
-				// console.log("no deltatick stored")
-				// return {items: [], recvTick: -1}
-			// }
 		}
 		if (snap.length == 0) {
 			// empty snap, copy old one into new ack
@@ -384,11 +386,6 @@ export class Snapshot {
 		var deleted: number[] = [];
 		for (let i = 0; i < num_removed_items; i++) {
 			let deleted_key = unpacker.unpackInt(); // removed_item_keys
-			// let index = this.deltas.map(delta => delta.key).indexOf(deleted_key);
-			// let index = this.deltas.findIndex(delta => delta.key === deleted_key);
-			// if (index > -1)
-				// this.deltas.splice(index, 1);
-				// console.log(deleted_key)
 			deleted.push(deleted_key)
 		}
 		/*item_delta:
@@ -447,8 +444,6 @@ export class Snapshot {
 			
 			this.eSnapHolder.push({Snapshot: {Data: data, Key: key}, ack: recvTick});
 
-			// items.items.push({data, type_id, id, key})
-		
 			this.deltas.push({
 				data, 
 				key, 
@@ -457,43 +452,21 @@ export class Snapshot {
 				parsed
 			});
 		
+			if (type_id >= items.EVENT_COMMON && type_id <= items.EVENT_DAMAGE_INDICATOR) {
+				// this.client.SnapshotUnpacker.
+				this.client.SnapshotUnpacker.emit(___itemAppendix[type_id].name, parsed);
+			}
 
 
 
 		}
-		// if (deleted.length) {
-			// let _beforeLength = this.eSnapHolder.length;
-			// this.eSnapHolder = this.eSnapHolder.filter(snap => !deleted.includes(snap.Snapshot.Key));
-			// let _beforeLength = this.eSnapHolder.length;
-			// if ((_beforeLength - this.eSnapHolder.length) !== num_removed_items) {
-				// console.log("remove!", (_beforeLength - this.eSnapHolder.length) == num_removed_items, (_beforeLength - this.eSnapHolder.length), num_removed_items, WantedCrc)
-
-			// }
-		// }
 		
 		for (let newSnap of deltaSnaps) {
 			if (deleted.includes(newSnap.Snapshot.Key)) {
-				// if ()
-				// this.deltas = this.deltas.filter(a => !deleted.includes(a.key))
 				continue;
 			}
 			if (this.eSnapHolder.findIndex(a => a.ack == recvTick && a.Snapshot.Key == newSnap.Snapshot.Key) === -1) { // ugly copy new snap to eSnapHolder (if it isnt pushed already)
 				this.eSnapHolder.push({Snapshot: {Data: newSnap.Snapshot.Data, Key: newSnap.Snapshot.Key}, ack: recvTick});
-				// this.deltas.push({})
-				// if (deltatick > -1) {
-				// 	let ____index = this.deltas.findIndex(delta => delta.key == newSnap.Snapshot.Key)
-				
-				// 	if (____index > -1) {
-				// 		this.deltas[____index] = {
-				// 			data: newSnap.Snapshot.Data, 
-				// 			key: newSnap.Snapshot.Key, 
-				// 			id: newSnap.Snapshot.Key & 0xffff, 
-				// 			type_id: ((newSnap.Snapshot.Key >> 16) & 0xffff), 
-				// 			parsed: this.parseItem(newSnap.Snapshot.Data, ((newSnap.Snapshot.Key >> 16) & 0xffff), ((newSnap.Snapshot.Key) & 0xffff))
-				// 		};
-				// 		continue;
-				// 	} 
-				// // }
 				let oldDelta = oldDeltas.find(delta => delta.key == newSnap.Snapshot.Key); 
 				if (oldDelta !== undefined && compareArrays(newSnap.Snapshot.Data, oldDelta.data)) {
 					this.deltas.push(oldDelta);
@@ -510,19 +483,7 @@ export class Snapshot {
 				}
 			}
 		}
-		// if (items.items.length != num_item_deltas)
-			// console.log("length", items.items.length, num_item_deltas, items.items.length - num_item_deltas, WantedCrc)
-		/* this.deltas = [];
-		for (let newSnap of this.eSnapHolder) {
-			if (newSnap.ack == recvTick)
-				this.deltas.push({
-					data: newSnap.Snapshot.Data, 
-					key: newSnap.Snapshot.Key, 
-					id: newSnap.Snapshot.Key & 0xffff, 
-					type_id: ((newSnap.Snapshot.Key >> 16) & 0xffff), 
-					parsed: this.parseItem(newSnap.Snapshot.Data, ((newSnap.Snapshot.Key >> 16) & 0xffff), ((newSnap.Snapshot.Key) & 0xffff))
-				});	
-			}*/
+
 		let _crc = this.crc();
 		if (_crc !== WantedCrc) {
 			this.deltas = oldDeltas;
@@ -539,11 +500,6 @@ export class Snapshot {
 			}
 		} else if (this.crc_errors > 0)
 			this.crc_errors--;
-		// let filterLength = this.eSnapHolder.filter(a => a.ack == recvTick).length
-		// if (this.deltas.length !== filterLength) {
-			// this.deltas = this.deltas.filter(a => !deleted.includes(a.key))
-			// console.log(this.deltas.length, filterLength, this.deltas.length - filterLength, num_item_deltas )
-		// }
 	
 		return {items: this.deltas, recvTick};
 	}
