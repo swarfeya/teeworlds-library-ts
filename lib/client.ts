@@ -5,7 +5,7 @@ import { EventEmitter } from 'stream';
 
 import { unpackString, MsgUnpacker } from "./MsgUnpacker";
 
-import Movement from './movement';
+import Movement from './components/movement';
 
 import { MsgPacker } from './MsgPacker';
 import { Item, Snapshot } from './snapshot';
