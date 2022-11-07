@@ -1,4 +1,4 @@
-declare interface PlayerInput {
+export declare interface PlayerInput {
     direction: number,
     target_x: number,
     target_y: number,
@@ -11,7 +11,7 @@ declare interface PlayerInput {
     prev_weapon: number,
 }
 
-declare interface Projectile {
+export declare interface Projectile {
     x: number,
     y: number,
     vel_x: number,
@@ -20,7 +20,7 @@ declare interface Projectile {
     start_tick: number,
 }
 
-declare interface Laser {
+export declare interface Laser {
     x: number,
     y: number,
     from_x: number,
@@ -28,20 +28,20 @@ declare interface Laser {
     start_tick: number,
 }
 
-declare interface Pickup {
+export declare interface Pickup {
     x: number,
     y: number,
     type_: number,
     subtype: number,
 }
 
-declare interface Flag {
+export declare interface Flag {
     x: number,
     y: number,
     team: number,
 }
 
-declare interface GameInfo {
+export declare interface GameInfo {
     game_flags: number,
     game_state_flags: number,
     round_start_tick: number,
@@ -52,14 +52,14 @@ declare interface GameInfo {
     round_current: number,
 }
 
-declare interface GameData {
+export declare interface GameData {
     teamscore_red: number,
     teamscore_blue: number,
     flag_carrier_red: number,
     flag_carrier_blue: number,
 }
 
-declare interface CharacterCore {
+export declare interface CharacterCore {
     tick: number,
     x: number,
     y: number,
@@ -77,7 +77,7 @@ declare interface CharacterCore {
     hook_dy: number,
 }
 
-declare interface Character {
+export declare interface Character {
     character_core: CharacterCore,
     player_flags: number,
     health: number,
@@ -86,9 +86,11 @@ declare interface Character {
     weapon: number,
     emote: number,
     attack_tick: number,
+
+    client_id: number
 }
 
-declare interface PlayerInfo {
+export declare interface PlayerInfo {
     local: number,
     client_id: number,
     team: number,
@@ -96,7 +98,7 @@ declare interface PlayerInfo {
     latency: number,
 }
 
-declare interface ClientInfo {
+export declare interface ClientInfo {
     name: string,
     clan: string,
     country: number,
@@ -104,9 +106,11 @@ declare interface ClientInfo {
     use_custom_color: number,
     color_body: number,
     color_feet: number,
+
+    id: number
 }
 
-declare interface DdnetCharacter {
+export declare interface DdnetCharacter {
     flags: number,
     freeze_end: number,
     jumps: number,
@@ -114,49 +118,49 @@ declare interface DdnetCharacter {
     strong_weak_id: number,
 }
 
-declare interface SpectatorInfo {
+export declare interface SpectatorInfo {
     spectator_id: number,
     x: number,
     y: number,
 }
 
-declare interface Common {
+export declare interface Common {
     x: number,
     y: number,
 }
 
-declare interface Explosion {
+export declare interface Explosion {
     common: Common,
 }
 
-declare interface Spawn {
+export declare interface Spawn {
     common: Common,
 }
 
-declare interface HammerHit {
+export declare interface HammerHit {
     common: Common,
 }
 
-declare interface Death {
+export declare interface Death {
     common: Common,
     client_id: number,
 }
 
-declare interface SoundGlobal {
+export declare interface SoundGlobal {
     common: Common,
     sound_id: number,
 }
 
-declare interface SoundWorld {
+export declare interface SoundWorld {
     common: Common,
     sound_id: number,
 }
 
-declare interface DamageInd {
+export declare interface DamageInd {
     common: Common,
     angle: number,
 }
-declare enum items {
+export declare enum items {
 	OBJ_EX,
 	OBJ_PLAYER_INPUT,
 	OBJ_PROJECTILE,

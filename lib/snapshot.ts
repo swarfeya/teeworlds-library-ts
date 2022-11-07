@@ -1,5 +1,6 @@
 import { Client } from "./client";
 import { MsgUnpacker } from "./MsgUnpacker";
+import { PlayerInput, PlayerInfo, Projectile, Laser, Pickup, Flag, GameInfo, GameData, CharacterCore, Character, ClientInfo, SpectatorInfo, Common, Explosion, Spawn, HammerHit, Death, SoundGlobal, SoundWorld, DamageInd } from "./snapshots";
 var decoder = new TextDecoder('utf-8');
 
 const ___itemAppendix: {"type_id": number, "size": number, "name": string}[] = [ // only used for the events underneath. the actual itemAppendix below this is only used for size
@@ -73,7 +74,7 @@ export enum items {
 	EVENT_DAMAGE_INDICATOR
 }
 
-export declare type Item = PlayerInput | PlayerInfo | Projectile | Laser | Pickup | Flag | GameInfo | GameData | CharacterCore | Character | PlayerInfo | ClientInfo | SpectatorInfo | Common | Explosion | Spawn |HammerHit | Death | SoundGlobal | SoundWorld | DamageInd | DdnetCharacter;
+export declare type Item = PlayerInput | PlayerInfo | Projectile | Laser | Pickup | Flag | GameInfo | GameData | CharacterCore | Character | PlayerInfo | ClientInfo | SpectatorInfo | Common | Explosion | Spawn |HammerHit | Death | SoundGlobal | SoundWorld | DamageInd;
 interface eSnap {
 	Snapshot: {Key: number, Data: number[]},
 	ack: number,
@@ -226,6 +227,8 @@ export class Snapshot {
 					weapon: data[19],
 					emote: data[20],
 					attack_tick: data[21],
+
+					client_id: id
 				} as Character
 				break;
 			case items.OBJ_PLAYER_INFO:
@@ -371,7 +374,8 @@ export class Snapshot {
 		* https://github.com/heinrich5991/libtw2/blob/master/snapshot/src/
 		* https://github.com/heinrich5991/libtw2/blob/master/doc/snapshot.md
 		*/ 
-	
+		var _events: {type_id: number, parsed: Item}[] = [];
+		
 		let num_removed_items = unpacker.unpackInt();
 		let num_item_deltas = unpacker.unpackInt();
 		unpacker.unpackInt(); // _zero padding
@@ -454,7 +458,9 @@ export class Snapshot {
 		
 			if (type_id >= items.EVENT_COMMON && type_id <= items.EVENT_DAMAGE_INDICATOR) {
 				// this.client.SnapshotUnpacker.
-				this.client.SnapshotUnpacker.emit(___itemAppendix[type_id].name, parsed);
+				
+				_events.push({type_id, parsed});
+				// this.client.SnapshotUnpacker.emit(___itemAppendix[type_id].name, parsed);
 			}
 
 
@@ -500,7 +506,7 @@ export class Snapshot {
 			}
 		} else if (this.crc_errors > 0)
 			this.crc_errors--;
-	
+		_events.forEach(a => this.client.SnapshotUnpacker.emit(___itemAppendix[a.type_id].name, a.parsed))
 		return {items: this.deltas, recvTick};
 	}
 }

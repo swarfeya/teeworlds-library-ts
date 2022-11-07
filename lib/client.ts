@@ -6,6 +6,7 @@ import { EventEmitter } from 'stream';
 import { unpackString, MsgUnpacker } from "./MsgUnpacker";
 
 import Movement from './components/movement';
+import { PlayerInput, PlayerInfo, Projectile, Laser, Pickup, Flag, GameInfo, GameData, CharacterCore, Character, ClientInfo, SpectatorInfo, Common, Explosion, Spawn, HammerHit, Death, SoundGlobal, SoundWorld, DamageInd } from "./snapshots";
 
 import { MsgPacker } from './MsgPacker';
 import { Item, Snapshot } from './snapshot';
@@ -139,23 +140,7 @@ var messageUUIDs = {
 	"CLIENT_VERSION": Buffer.from([0x8c, 0x00, 0x13, 0x04, 0x84, 0x61, 0x3e, 0x47, 0x87, 0x87, 0xf6, 0x72, 0xb3, 0x83, 0x5b, 0xd4]),
 	"CAPABILITIES": Buffer.from([0xf6, 0x21, 0xa5, 0xa1, 0xf5, 0x85, 0x37, 0x75, 0x8e, 0x73, 0x41, 0xbe, 0xee, 0x79, 0xf2, 0xb2]),
 }
-declare interface PlayerInfo {
-	local: number,
-	client_id: number,
-	team: number,
-	score: number,
-	latency: number,
-}
 
-declare interface ClientInfo {
-	name: string,
-	clan: string,
-	country: number,
-	skin: string,
-	use_custom_color: number,
-	color_body: number,
-	color_feet: number,
-}
 declare interface iMessage {
 	team: number,
 	client_id: number,

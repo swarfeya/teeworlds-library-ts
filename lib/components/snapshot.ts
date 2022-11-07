@@ -1,6 +1,7 @@
 
 import { Client } from "../client";
 import { EventEmitter } from "stream";
+import { PlayerInput, PlayerInfo, Projectile, Laser, Pickup, Flag, GameInfo, GameData, CharacterCore, Character, ClientInfo, SpectatorInfo, Common, Explosion, Spawn, HammerHit, Death, SoundGlobal, SoundWorld, DamageInd } from "../snapshots";
 
 enum items {
 	OBJ_EX,
@@ -123,17 +124,22 @@ export class SnapshotWrapper extends EventEmitter {
 		return this.getAll(items.OBJ_GAME_DATA);
 	}
 	
-	getObjCharacterCore(player_id: number): CharacterCore | undefined { // NOTICE: x & y positions always differ from the positions in the ingame debug menu. If you want the debug menu positions, you can calculate them like this: Math.round((myChar.x / 32) * 100)/100
+	/** NOTICE: x & y positions always differ from the positions in the ingame debug menu. If you want the debug menu positions, you can calculate them like this: Math.round((myChar.character_core.x / 32) * 100)/100 */
+	getObjCharacterCore(player_id: number): CharacterCore | undefined { 
 		return this.getParsed(items.OBJ_CHARACTER_CORE, player_id);
 	}
-	get AllObjCharacterCore(): CharacterCore[] { // NOTICE: x & y positions always differ from the positions in the ingame debug menu. If you want the debug menu positions, you can calculate them like this: Math.round((myChar.x / 32) * 100)/100
+	/** NOTICE: x & y positions always differ from the positions in the ingame debug menu. If you want the debug menu positions, you can calculate them like this: Math.round((myChar.character_core.x / 32) * 100)/100 */
+	get AllObjCharacterCore(): CharacterCore[] { 
 		return this.getAll(items.OBJ_CHARACTER_CORE);
 	}
 
-	getObjCharacter(player_id: number): Character | undefined { // NOTICE: x & y positions always differ from the positions in the ingame debug menu. If you want the debug menu positions, you can calculate them like this: Math.round((myChar.character_core.x / 32) * 100)/100
+	/** NOTICE: x & y positions always differ from the positions in the ingame debug menu. If you want the debug menu positions, you can calculate them like this: Math.round((myChar.character_core.x / 32) * 100)/100 */
+	getObjCharacter(player_id: number): Character | undefined { 
 		return this.getParsed(items.OBJ_CHARACTER, player_id);
 	}
-	get AllObjCharacter(): Character[] { // NOTICE: x & y positions always differ from the positions in the ingame debug menu. If you want the debug menu positions, you can calculate them like this: Math.round((myChar.character_core.x / 32) * 100)/100
+	/** NOTICE: x & y positions always differ from the positions in the ingame debug menu. If you want the debug menu positions, you can calculate them like this: Math.round((myChar.character_core.x / 32) * 100)/100 */
+	get AllObjCharacter(): Character[] { 
+		
 		return this.getAll(items.OBJ_CHARACTER);
 	}
 	
