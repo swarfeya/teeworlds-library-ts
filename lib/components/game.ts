@@ -29,23 +29,26 @@ export class Game {
 		this.send(packer);
 	}
 
-	/* Set the team of an bot. (-1 spectator team, 0 team red/normal team, 1 team blue) */
-	SetTeam(team: number) {
+	
+	/** Set the team of an bot. (-1 spectator team, 0 team red/normal team, 1 team blue) */
+	SetTeam(team: number) { 
 		var packer = new MsgPacker(NETMSGTYPE.CL_SETTEAM, false, 1);
 		packer.AddInt(team);
 		this.send(packer);
 	}
 	
-	/* Spectate an player, taking their id as parameter. pretty useless */
-	SpectatorMode(SpectatorID: number) {
+	
+	/** Spectate an player, taking their id as parameter. pretty useless */
+	SpectatorMode(SpectatorID: number) { 
 		var packer = new MsgPacker(NETMSGTYPE.CL_SETSPECTATORMODE, false, 1);
 		packer.AddInt(SpectatorID);
 		this.send(packer);
 	}
 
 	
-	/* Change the player info */
-	ChangePlayerInfo(playerInfo: ClientInfo) {
+	
+	/** Change the player info */
+	ChangePlayerInfo(playerInfo: ClientInfo) { 
 		var packer = new MsgPacker(NETMSGTYPE.CL_CHANGEINFO, false, 1);
 		packer.AddString(playerInfo.name); 
 		packer.AddString(playerInfo.clan); 
@@ -57,21 +60,24 @@ export class Game {
 		this.send(packer);
 	}
 
-	/* Kill */
-	Kill() {
+	
+	/** Kill */
+	Kill() { 
 		var packer = new MsgPacker(NETMSGTYPE.CL_KILL, false, 1);
 		this.send(packer);
 	}
 
-	/* Send emote */
-	Emote(emote: number) {
+	
+	/** Send emote */
+	Emote(emote: number) { 
 		var packer = new MsgPacker(NETMSGTYPE.CL_EMOTICON, false, 1);
 		packer.AddInt(emote);
 		this.send(packer);
 	}
 
-	/* Vote for an already running vote (f3 / f4) */
-	Vote(vote: boolean) {
+	
+	/** Vote for an already running vote (true = f3 /  false = f4) */
+	Vote(vote: boolean) { 
 		var packer = new MsgPacker(NETMSGTYPE.CL_VOTE, false, 1);
 		packer.AddInt(vote ? 1 : -1);
 		this.send(packer);
@@ -84,27 +90,32 @@ export class Game {
 		packer.AddString(Reason);
 		this.send(packer);
 	}
-	/* Call a vote for an server option (for example ddnet maps) */
-	CallVoteOption(Value: string, Reason: string) {
+	
+	/** Call a vote for an server option (for example ddnet maps) */
+	CallVoteOption(Value: string, Reason: string) { 
 		this.CallVote("option", Value, Reason)
 	}
-	/* Call a vote to kick a player. Requires the player id */
-	CallVoteKick(PlayerID: string|number, Reason: string) {
+	
+	/** Call a vote to kick a player. Requires the player id */
+	CallVoteKick(PlayerID: string|number, Reason: string) { 
 		this.CallVote("kick", PlayerID, Reason)
 	}
-	/* Call a vote to set a player in spectator mode. Requires the player id */
-	CallVoteSpectate(PlayerID: string|number, Reason: string) {
+	
+	/** Call a vote to set a player in spectator mode. Requires the player id */
+	CallVoteSpectate(PlayerID: string|number, Reason: string) { 
 		this.CallVote("spectate", PlayerID, Reason)
 	}
 
 
-	/** probably some verification of using ddnet client.*/
+	
+	/** probably some verification of using ddnet client. */
 	IsDDNetLegacy() { 
 		var packer = new MsgPacker(NETMSGTYPE.CL_ISDDNETLEGACY, false, 1);
 		this.send(packer);
 	}
-	/* returns the ping in ms */
-	Ping(): Promise<number> {
+	
+	/** returns the ping in ms (as a promise) */
+	Ping(): Promise<number> { 
 		return new Promise((resolve, reject) => {
 			var packer = new MsgPacker(22, true, 0);
 			let startTime = new Date().getTime();

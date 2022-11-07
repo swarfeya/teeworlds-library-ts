@@ -118,9 +118,7 @@ interface chunk {
 	raw: Buffer,
 	extended_msgid?: Buffer;
 }
-function toHexStream(buff: Buffer): string {
-	return buff.toJSON().data.map(a => ('0' + (a & 0xff).toString(16)).slice(-2)).join("");
-}
+
 interface _packet {
 	twprotocol: { flags: number, ack: number, chunkAmount: number, size: number },
 	chunks: chunk[]
@@ -139,16 +137,6 @@ var messageUUIDs = {
 	"MAP_DETAILS": Buffer.from([0xf9, 0x11, 0x7b, 0x3c, 0x80, 0x39, 0x34, 0x16, 0x9f, 0xc0, 0xae, 0xf2, 0xbc, 0xb7, 0x5c, 0x03]),
 	"CLIENT_VERSION": Buffer.from([0x8c, 0x00, 0x13, 0x04, 0x84, 0x61, 0x3e, 0x47, 0x87, 0x87, 0xf6, 0x72, 0xb3, 0x83, 0x5b, 0xd4]),
 	"CAPABILITIES": Buffer.from([0xf6, 0x21, 0xa5, 0xa1, 0xf5, 0x85, 0x37, 0x75, 0x8e, 0x73, 0x41, 0xbe, 0xee, 0x79, 0xf2, 0xb2]),
-}
-
-function arrStartsWith(arr: number[], arrStart: number[], start = 0) {
-	arr.splice(0, start)
-	for (let i = 0; i < arrStart.length; i++) {
-		if (arr[i] == arrStart[i])
-			continue;
-		else return false;
-	}
-	return true;
 }
 declare interface PlayerInfo {
 	local: number,
@@ -360,8 +348,9 @@ export class Client extends EventEmitter {
 		return unpacked
 	}
 
-	/* Send a Control Msg to the server. (used for disconnect)*/
-	SendControlMsg(msg: number, ExtraMsg: string = "") {
+	
+	/**  Send a Control Msg to the server. (used for disconnect)*/
+	SendControlMsg(msg: number, ExtraMsg: string = "") { 
 		this.lastSendTime = new Date().getTime();
 		return new Promise((resolve, reject) => {
 			if (this.socket) {
@@ -380,8 +369,9 @@ export class Client extends EventEmitter {
 		})
 	}
 
-	/* Send a Msg (or Msg[]) to the server.*/
-	SendMsgEx(Msgs: MsgPacker[] | MsgPacker) {
+	
+	/**  Send a Msg (or Msg[]) to the server.*/
+	SendMsgEx(Msgs: MsgPacker[] | MsgPacker) { 
 		if (this.State == States.STATE_OFFLINE)
 			return; 
 		if (!this.socket)
@@ -439,12 +429,14 @@ export class Client extends EventEmitter {
 			return;
 		this.socket.send(packet, 0, packet.length, this.port, this.host)
 	}
-	/* Queue a chunk (It will get sent in the next packet). */
+	
+	/** Queue a chunk (It will get sent in the next packet). */
 	QueueChunkEx(Msg: MsgPacker) {
 		this.queueChunkEx.push(Msg);
 	}
-	/* Send a Raw Buffer (as chunk) to the server. */
-	SendMsgRaw(chunks: Buffer[]) {
+	
+	/**  Send a Raw Buffer (as chunk) to the server. */
+	SendMsgRaw(chunks: Buffer[]) { 
 		if (this.State == States.STATE_OFFLINE)
 			return;
 		if (!this.socket)
@@ -485,8 +477,9 @@ export class Client extends EventEmitter {
 		return chunk;
 	}
 
-	/* Connect the client to the server. */
-	connect() {
+	
+	/** Connect the client to the server. */
+	connect() { 
 		this.State = States.STATE_CONNECTING;
 
 		let predTimer = setInterval(() => {
@@ -834,8 +827,9 @@ export class Client extends EventEmitter {
 			})
 	}
 
-	/* Sending the input. (automatically done unless options.lightweight is on) */
-	sendInput(input = this.movement.input) {
+	
+	/** Sending the input. (automatically done unless options.lightweight is on) */
+	sendInput(input = this.movement.input) { 
 		if (this.State != States.STATE_ONLINE)
 			return;
 
@@ -857,12 +851,14 @@ export class Client extends EventEmitter {
 		
 		this.SendMsgEx(inputMsg);
 	}
-	get input() {
+	/** returns the movement object of the client */
+	get input() { 
 		return this.movement.input;
 	}
 
-	/* Disconnect the client. */
-	Disconnect() {
+	
+	/** Disconnect the client. */
+	Disconnect() { 
 		return new Promise((resolve) => {
 			this.SendControlMsg(4).then(() => {
 				resolve(true);
@@ -874,8 +870,9 @@ export class Client extends EventEmitter {
 		})
 	}
 
-	/* Get the client_info from a specific player id. */
-	client_info(id: number) {
+	
+	/** Get the client_info from a specific player id. */
+	client_info(id: number) { 
 		let delta = this.SnapUnpacker.deltas.filter(_delta => 
 			_delta.type_id == 11 
 			&& _delta.id == id
@@ -888,15 +885,16 @@ export class Client extends EventEmitter {
 			// .map(a => a.parsed as ClientInfo);
 	}
 
-	/* Get all client infos. */
-	get client_infos(): ClientInfo[] {
-		
+	
+	/** Get all client infos. */
+	get client_infos(): ClientInfo[] { 
 		return this.SnapUnpacker.deltas.filter(_delta => _delta.type_id == 11)
 		.sort((a, b) => a.id - b.id)
 		.map(a => a.parsed as ClientInfo);
 	}
-	/* Get the player info from a specific player id. */
-	player_info(id: number) {
+	
+	/** Get the player info from a specific player id. */
+	player_info(id: number) { 
 		let delta = this.SnapUnpacker.deltas.filter(_delta => 
 			_delta.type_id == 10
 			&& _delta.id == id
@@ -906,14 +904,15 @@ export class Client extends EventEmitter {
 			return undefined;
 		return delta[0].parsed as PlayerInfo;
 	}
-	/* Get all player infos. */
-	get player_infos(): PlayerInfo[] {
+
+	/**  Get all player infos. */
+	get player_infos(): PlayerInfo[] { 
 		return this.SnapUnpacker.deltas.filter(_delta => _delta.type_id == 10)
 			.sort((a, b) => a.id - b.id)
 			.map(player => player.parsed as PlayerInfo);
 	}
-
-	get VoteOptionList(): string[] {
+	/** Get all available vote options (for example for map voting) */
+	get VoteOptionList(): string[] { 
 		return this.VoteList;
 	}
 }
