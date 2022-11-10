@@ -726,7 +726,7 @@ export class Client extends EventEmitter {
 							for (let i = 0; i < 15; i++) {
 								list.push(unpacker.unpackString());
 							}
-							list = list.slice(NumOptions);
+							list = list.slice(0, NumOptions);
 
 							this.VoteList.push(...list);
 						} else if (chunk.msgid == NETMSG_Game.SV_VOTEOPTIONADD) {
