@@ -28,13 +28,13 @@ client.on("message", message => {
 		message: 'a',
 		author: {
 			ClientInfo: {
-			name: 'Nudelsaft c:',
-			clan: '',
-			country: 276,
-			skin: 'coala_toptri',
-			use_custom_color: 0,
-			color_body: 4718592,
-			color_feet: 5046016
+				name: 'Nudelsaft c:',
+				clan: '',
+				country: 276,
+				skin: 'coala_toptri',
+				use_custom_color: 0,
+				color_body: 4718592,
+				color_feet: 5046016
 			},
 			PlayerInfo: { local: 0, client_id: 4, team: 0, score: 36, latency: 0 }
 		}
