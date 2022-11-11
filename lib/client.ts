@@ -1,4 +1,4 @@
-import { randomBytes, createHash } from "crypto";
+import { randomBytes } from "crypto";
 
 import net from 'dgram';
 import { EventEmitter } from 'stream';
@@ -149,7 +149,6 @@ var messageTypes = [
 ]
 
 
-
 declare interface iMessage {
 	team: number,
 	client_id: number,
@@ -242,7 +241,7 @@ export class Client extends EventEmitter {
 	public readonly options?: iOptions;
 	private requestResend: boolean;
 
-	UUIDManager: UUIDManager;
+	private UUIDManager: UUIDManager;
   
 	constructor(ip: string, port: number, nickname: string, options?: iOptions) {
 		super();
@@ -361,8 +360,6 @@ export class Client extends EventEmitter {
 					chunk.msg = uuid.name;
 					chunk.raw = chunk.raw.slice(16);
 					chunk.msgid = uuid.type_id;
-					console.log("UUID", chunk.msgid, chunk.msg, chunk.raw, chunk.extended_msgid, uuid)
-
 				}
 			}
 
@@ -580,8 +577,6 @@ export class Client extends EventEmitter {
 						client_version.AddBuffer(Buffer.from("8c00130484613e478787f672b3835bd4", 'hex'));
 						let randomUuid = randomBytes(16);
 
-						// randomBytes(16).copy(randomUuid);
-
 						client_version.AddBuffer(randomUuid);
 						if (this.options?.ddnet_version !== undefined) {
 							client_version.AddInt(this.options?.ddnet_version.version);
@@ -753,23 +748,18 @@ export class Client extends EventEmitter {
 						}
 						
 						if (chunk.msgid >= NETMSG_Sys.NETMSG_WHATIS && chunk.msgid <= NETMSG_Sys.NETMSG_CHECKSUM_ERROR) {
-							console.log(chunk.msgid, chunk.msg, chunk.raw);
-
 
 							if (chunk.msgid == NETMSG_Sys.NETMSG_WHATIS) {
-								console.log("netmsg what is!")
 								let Uuid = chunk.raw.slice(0, 16);
-								let find: string = "";
+
 								let uuid = this.UUIDManager.LookupUUID(Uuid);
-								if (uuid == undefined)
-									return;
 								let packer = new MsgPacker(0, true, 1);
-								if (find.length > 0) {
+								if (uuid !== undefined) {
 									// IT_IS msg
 									packer.AddBuffer(this.UUIDManager.LookupType(NETMSG_Sys.NETMSG_ITIS).hash);
 									
 									packer.AddBuffer(Uuid);
-									packer.AddString(find);
+									packer.AddString(uuid.name);
 								} else {
 									// dont_know msg
 									packer.AddBuffer(this.UUIDManager.LookupType(NETMSG_Sys.NETMSG_IDONTKNOW).hash);
