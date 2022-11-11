@@ -50,6 +50,31 @@ class Movement {
 		this.input.m_TargetX = x;
 		this.input.m_TargetY = y;
 	}
+	
+	private Flag(toggle: boolean, num: number) {
+		if (toggle) {
+			this.input.m_PlayerFlags |= num;
+		} else {
+			this.input.m_PlayerFlags &= ~num;
+
+		}
+	}
+	FlagPlaying(toggle = true) {
+		this.Flag(toggle, 1);
+	}
+	FlagInMenu(toggle = true) {
+		this.Flag(toggle, 2);
+	}
+	FlagChatting(toggle = true) {
+		this.Flag(toggle, 4);
+	}
+	FlagScoreboard(toggle = true) {
+		this.Flag(toggle, 8);
+	}
+	FlagHookline(toggle = true) {
+		this.Flag(toggle, 16);
+	}
+
 	Reset() {
 		this.input.m_Direction = 0;
 		this.input.m_Jump = 0;
