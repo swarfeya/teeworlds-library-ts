@@ -1,4 +1,4 @@
-import { randomBytes } from "crypto";
+import { randomBytes, createHash } from "crypto";
 
 import net from 'dgram';
 import { EventEmitter } from 'stream';
@@ -13,6 +13,8 @@ import { Item, Snapshot } from './snapshot';
 import Huffman from "./huffman";
 import { Game } from "./components/game";
 import { SnapshotWrapper } from "./components/snapshot";
+
+import { UUIDManager } from "./UUIDManager";
 
 const huff = new Huffman();
 
@@ -106,6 +108,21 @@ enum NETMSG_Sys {
 	NETMSG_RCON_CMD_REM,
 
 	NUM_NETMSGS,
+
+	NETMSG_WHATIS = 65536,
+	NETMSG_ITIS,
+	NETMSG_IDONTKNOW,
+
+	NETMSG_RCONTYPE,
+	NETMSG_MAP_DETAILS,
+	NETMSG_CAPABILITIES,
+	NETMSG_CLIENTVER,
+	NETMSG_PINGEX,
+	NETMSG_PONGEX,
+	NETMSG_CHECKSUM_REQUEST,
+	NETMSG_CHECKSUM_RESPONSE,
+	NETMSG_CHECKSUM_ERROR
+
 }
 
 interface chunk {
@@ -131,15 +148,7 @@ var messageTypes = [
 	["none, starts at 1", "INFO", "MAP_CHANGE", "MAP_DATA", "CON_READY", "SNAP", "SNAP_EMPTY", "SNAP_SINGLE", "INPUT_TIMING", "RCON_AUTH_STATUS", "RCON_LINE", "READY", "ENTER_GAME", "INPUT", "RCON_CMD", "RCON_AUTH", "REQUEST_MAP_DATA", "PING", "PING_REPLY", "RCON_CMD_ADD", "RCON_CMD_REMOVE"]
 ]
 
-var messageUUIDs = {
-	"WHAT_IS": Buffer.from([0x24, 0x5e, 0x50, 0x97, 0x9f, 0xe0, 0x39, 0xd6, 0xbf, 0x7d, 0x9a, 0x29, 0xe1, 0x69, 0x1e, 0x4c]),
-	"IT_IS": Buffer.from([0x69, 0x54, 0x84, 0x7e, 0x2e, 0x87, 0x36, 0x03, 0xb5, 0x62, 0x36, 0xda, 0x29, 0xed, 0x1a, 0xca]),
-	"I_DONT_KNOW": Buffer.from([0x41, 0x69, 0x11, 0xb5, 0x79, 0x73, 0x33, 0xbf, 0x8d, 0x52, 0x7b, 0xf0, 0x1e, 0x51, 0x9c, 0xf0]),
-	"RCON_TYPE": Buffer.from([0x12, 0x81, 0x0e, 0x1f, 0xa1, 0xdb, 0x33, 0x78, 0xb4, 0xfb, 0x16, 0x4e, 0xd6, 0x50, 0x59, 0x26]),
-	"MAP_DETAILS": Buffer.from([0xf9, 0x11, 0x7b, 0x3c, 0x80, 0x39, 0x34, 0x16, 0x9f, 0xc0, 0xae, 0xf2, 0xbc, 0xb7, 0x5c, 0x03]),
-	"CLIENT_VERSION": Buffer.from([0x8c, 0x00, 0x13, 0x04, 0x84, 0x61, 0x3e, 0x47, 0x87, 0x87, 0xf6, 0x72, 0xb3, 0x83, 0x5b, 0xd4]),
-	"CAPABILITIES": Buffer.from([0xf6, 0x21, 0xa5, 0xa1, 0xf5, 0x85, 0x37, 0x75, 0x8e, 0x73, 0x41, 0xbe, 0xee, 0x79, 0xf2, 0xb2]),
-}
+
 
 declare interface iMessage {
 	team: number,
@@ -183,6 +192,9 @@ export declare interface Client {
 	on(event: 'broadcast', listener: (message: string) => void): this;
 	on(event: 'kill', listener: (kill: iKillMsg) => void): this;
 	on(event: 'motd', listener: (message: string) => void): this;
+	
+	on(event: 'map_details', listener: (message: {map_name: string, map_sha256: Buffer, map_crc: number, map_size: number, map_url: string}) => void): this;
+	on(event: 'capabilities', listener: (message: {ChatTimeoutCode: boolean, AnyPlayerFlag: boolean, PingEx: boolean, AllowDummy: boolean, SyncWeaponInput: boolean}) => void): this;
 	
 	on(event: 'snapshot', listener: (items: Item[]) => void): this;
 }
@@ -230,6 +242,7 @@ export class Client extends EventEmitter {
 	public readonly options?: iOptions;
 	private requestResend: boolean;
 
+	UUIDManager: UUIDManager;
   
 	constructor(ip: string, port: number, nickname: string, options?: iOptions) {
 		super();
@@ -275,6 +288,22 @@ export class Client extends EventEmitter {
 		this.game = new Game(this);
 		this.SnapshotUnpacker = new SnapshotWrapper(this);
 
+		this.UUIDManager = new UUIDManager();
+		
+		
+		this.UUIDManager.RegisterName("what-is@ddnet.tw");
+		this.UUIDManager.RegisterName("it-is@ddnet.tw");
+		this.UUIDManager.RegisterName("i-dont-know@ddnet.tw");
+
+		this.UUIDManager.RegisterName("rcon-type@ddnet.tw");
+		this.UUIDManager.RegisterName("map-details@ddnet.tw");
+		this.UUIDManager.RegisterName("capabilities@ddnet.tw");
+		this.UUIDManager.RegisterName("clientver@ddnet.tw");
+		this.UUIDManager.RegisterName("ping@ddnet.tw");
+		this.UUIDManager.RegisterName("pong@ddnet.tw");
+		this.UUIDManager.RegisterName("checksum-request@ddnet.tw");
+		this.UUIDManager.RegisterName("checksum-response@ddnet.tw");
+		this.UUIDManager.RegisterName("checksum-error@ddnet.tw");
 
 	}
 
@@ -325,12 +354,17 @@ export class Client extends EventEmitter {
 			chunk.msgid = (packet[0] - (packet[0] & 1)) / 2;
 			chunk.msg = messageTypes[packet[0] & 1][chunk.msgid];
 			chunk.raw = packet.slice(1, chunk.bytes)
-			Object.values(messageUUIDs).forEach((a, i) => {
-				if (a.byteLength >= 16 && a.compare(packet.slice(0, 16)) == 0) {
-					chunk.extended_msgid = a;
-					chunk.msg = Object.keys(messageUUIDs)[i];
+			if (chunk.msgid == 0 && chunk.raw.byteLength >= 16) {
+				let uuid = this.UUIDManager.LookupUUID(chunk.raw.slice(0, 16));
+				if (uuid !== undefined) {
+					chunk.extended_msgid = uuid.hash;
+					chunk.msg = uuid.name;
+					chunk.raw = chunk.raw.slice(16);
+					chunk.msgid = uuid.type_id;
+					console.log("UUID", chunk.msgid, chunk.msg, chunk.raw, chunk.extended_msgid, uuid)
+
 				}
-			})
+			}
 
 			packet = packet.slice(chunk.bytes) 
 			unpacked.chunks.push(chunk)
@@ -361,7 +395,7 @@ export class Client extends EventEmitter {
 
 	
 	/**  Send a Msg (or Msg[]) to the server.*/
-	SendMsgEx(Msgs: MsgPacker[] | MsgPacker) { 
+	SendMsgEx(Msgs: MsgPacker[] | MsgPacker, flags = 0) { 
 		if (this.State == States.STATE_OFFLINE)
 			return; 
 		if (!this.socket)
@@ -397,7 +431,7 @@ export class Client extends EventEmitter {
 					this.lastSentMessages.push({msg: Msg, ack: this.clientAck})
 			}
 		})
-		let flags = 0;
+		// let flags = 0;
 		if (this.requestResend)
 			flags |= 4;
 		
@@ -458,12 +492,16 @@ export class Client extends EventEmitter {
 		chunk.msgid = (packet[0]-(packet[0]&1))/2;
 		chunk.msg = messageTypes[packet[0]&1][chunk.msgid];
 		chunk.raw = packet.slice(1, chunk.bytes)
-		Object.values(messageUUIDs).forEach((a, i) => {
-			if (a.byteLength >= 16 && a.compare(packet.slice(0, 16)) === 0) {
-				chunk.extended_msgid = a;
-				chunk.msg = Object.keys(messageUUIDs)[i];
-			}
-		})
+		if (chunk.msgid == 0) {
+			let uuid = this.UUIDManager.LookupUUID(chunk.raw.slice(0,16));
+			if (uuid !== undefined) {
+				chunk.extended_msgid = uuid.hash;
+				chunk.msgid = uuid.type_id;
+				chunk.msg = uuid.name;
+				chunk.raw = chunk.raw.slice(16);
+			}	
+			
+		}
 		return chunk;
 	}
 
@@ -540,17 +578,17 @@ export class Client extends EventEmitter {
 
 						var client_version = new MsgPacker(0, true, 1);
 						client_version.AddBuffer(Buffer.from("8c00130484613e478787f672b3835bd4", 'hex'));
-						let randomUuid = Buffer.allocUnsafe(16);
+						let randomUuid = randomBytes(16);
 
-						randomBytes(16).copy(randomUuid);
+						// randomBytes(16).copy(randomUuid);
 
 						client_version.AddBuffer(randomUuid);
 						if (this.options?.ddnet_version !== undefined) {
 							client_version.AddInt(this.options?.ddnet_version.version);
 							client_version.AddString("DDNet " + this.options?.ddnet_version.release_version);
 						} else {
-							client_version.AddInt(16003);
-							client_version.AddString("DDNet 16.0.3");
+							client_version.AddInt(16050);
+							client_version.AddString("DDNet 16.5.0");
 						}
 		
 						this.SendMsgEx([client_version, info])
@@ -712,7 +750,99 @@ export class Client extends EventEmitter {
 					// })
 
 
-				}
+						}
+						
+						if (chunk.msgid >= NETMSG_Sys.NETMSG_WHATIS && chunk.msgid <= NETMSG_Sys.NETMSG_CHECKSUM_ERROR) {
+							console.log(chunk.msgid, chunk.msg, chunk.raw);
+
+
+							if (chunk.msgid == NETMSG_Sys.NETMSG_WHATIS) {
+								console.log("netmsg what is!")
+								let Uuid = chunk.raw.slice(0, 16);
+								let find: string = "";
+								let uuid = this.UUIDManager.LookupUUID(Uuid);
+								if (uuid == undefined)
+									return;
+								let packer = new MsgPacker(0, true, 1);
+								if (find.length > 0) {
+									// IT_IS msg
+									packer.AddBuffer(this.UUIDManager.LookupType(NETMSG_Sys.NETMSG_ITIS).hash);
+									
+									packer.AddBuffer(Uuid);
+									packer.AddString(find);
+								} else {
+									// dont_know msg
+									packer.AddBuffer(this.UUIDManager.LookupType(NETMSG_Sys.NETMSG_IDONTKNOW).hash);
+									
+									packer.AddBuffer(Uuid);
+								}
+								this.QueueChunkEx(packer)
+							}
+
+							if (chunk.msgid == NETMSG_Sys.NETMSG_MAP_DETAILS) { // TODO: option for downloading maps
+								let unpacker = new MsgUnpacker(chunk.raw);
+
+								let map_name = unpacker.unpackString();
+								let map_sha256: Buffer = Buffer.alloc(32);
+								if (unpacker.remaining.length >= 32)
+									map_sha256 = unpacker.unpackRaw(32);
+								let map_crc = unpacker.unpackInt();
+								let map_size = unpacker.unpackInt();
+
+								let map_url = "";
+								if (unpacker.remaining.length) 
+									map_url = unpacker.unpackString();
+								
+								this.emit("map_details", {map_name, map_sha256, map_crc, map_size, map_url})
+								// unpacker.unpack
+
+							} else if (chunk.msgid == NETMSG_Sys.NETMSG_CAPABILITIES) {
+								let unpacker = new MsgUnpacker(chunk.raw);
+								let Version = unpacker.unpackInt();
+								let Flags = unpacker.unpackInt();
+								if (Version <= 0)
+									return;
+								let DDNet = false;
+								if (Version >= 1) {
+									DDNet = Boolean(Flags & 1);
+									
+								}
+								let ChatTimeoutCode = DDNet;
+								let AnyPlayerFlag = DDNet;
+								let PingEx = false;
+								let AllowDummy = true;
+								let SyncWeaponInput = false;
+								if(Version >= 1)
+								{
+									ChatTimeoutCode = Boolean(Flags & 2);
+								}
+								if(Version >= 2)
+								{
+									AnyPlayerFlag = Boolean(Flags & 4);
+								}
+								if(Version >= 3)
+								{
+									PingEx = Boolean(Flags & 8);
+								}
+								if(Version >= 4)
+								{
+									AllowDummy = Boolean(Flags & 16);
+								}
+								if(Version >= 5)
+								{
+									SyncWeaponInput = Boolean(Flags & 32);
+								}
+								this.emit("capabilities", {ChatTimeoutCode, AnyPlayerFlag, PingEx, AllowDummy, SyncWeaponInput});
+								// https://github.com/ddnet/ddnet/blob/06e3eb564150e9ab81b3a5595c48e9fe5952ed32/src/engine/client/client.cpp#L1565
+							} else if (chunk.msgid == NETMSG_Sys.NETMSG_PINGEX) {
+								let packer = new MsgPacker(0, true, 2);
+								packer.AddBuffer(this.UUIDManager.LookupType(NETMSG_Sys.NETMSG_PONGEX).hash);
+
+								this.SendMsgEx(packer, 2);
+							}
+
+						}
+
 					} else { 
 						// game messages
 

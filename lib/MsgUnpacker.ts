@@ -48,4 +48,11 @@ export class MsgUnpacker {
 		this.remaining = unpacked.remaining;
 		return unpacked.result;
 	}
+
+	/** @param size - size in bytes */
+	unpackRaw(size: number): Buffer {
+		let unpacked = this.remaining.slice(0, size);
+		this.remaining = this.remaining.slice(size);
+		return unpacked;
+	}
 }
