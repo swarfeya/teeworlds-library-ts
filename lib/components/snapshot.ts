@@ -1,7 +1,7 @@
 
 import { Client } from "../client";
 import { EventEmitter } from "stream";
-import { PlayerInput, PlayerInfo, Projectile, Laser, Pickup, Flag, GameInfo, GameData, CharacterCore, Character, ClientInfo, SpectatorInfo, Common, Explosion, Spawn, HammerHit, Death, SoundGlobal, SoundWorld, DamageInd } from "../snapshots";
+import { PlayerInput, PlayerInfo, Projectile, Laser, Pickup, Flag, GameInfo, GameData, CharacterCore, Character, ClientInfo, SpectatorInfo, Common, Explosion, Spawn, HammerHit, Death, SoundGlobal, SoundWorld, DamageInd, MyOwnObject, DDNetCharacter, DDNetProjectile, DDNetLaser, GameInfoEx } from "../snapshots";
 
 enum items {
 	OBJ_EX,
@@ -58,12 +58,15 @@ export class SnapshotWrapper extends EventEmitter {
 	}
 	
 	private getParsed<T>(type_id: number, id: number) {
+		if (type_id == -1)
+			return undefined;
 		return this._client.rawSnapUnpacker.deltas.find(delta => delta.type_id == type_id && delta.id == id)?.parsed as unknown as T;
 	}
 
 	private getAll<T>(type_id: number): T[] {
 		let _all: T[] = [];
-
+		if (type_id == -1)
+			return _all;
 		this._client.rawSnapUnpacker.deltas.forEach(delta => {
 			if (delta.type_id == type_id)
 				_all.push(delta.parsed as T);
@@ -163,6 +166,48 @@ export class SnapshotWrapper extends EventEmitter {
 	get AllObjSpectatorInfo(): SpectatorInfo[] {
 		return this.getAll(items.OBJ_SPECTATOR_INFO);
 	}
+	
+	private getTypeId(name: string) {
+		return this._client.rawSnapUnpacker.uuid_manager.LookupName(name)?.type_id || -1;
+	}
+
+	getObjExMyOwnObject(id: number): MyOwnObject | undefined {
+		return this.getParsed(this.getTypeId("my-own-object@heinrich5991.de"), id);
+	}
+	get AllObjExMyOwnObject(): MyOwnObject[] {
+		return this.getAll(this.getTypeId("my-own-object@heinrich5991.de"));
+	}
+
+	getObjExDDNetCharacter(id: number): DDNetCharacter | undefined {
+		return this.getParsed(this.getTypeId("character@netobj.ddnet.tw"), id);
+	}
+	get AllObjExDDNetCharacter(): DDNetCharacter[] {
+		return this.getAll(this.getTypeId("character@netobj.ddnet.tw"));
+	}
+	
+	getObjExGameInfo(id: number): GameInfoEx | undefined {
+		return this.getParsed(this.getTypeId("gameinfo@netobj.ddnet.tw"), id);
+	}
+	get AllObjExGameInfo(): GameInfoEx[] {
+		return this.getAll(this.getTypeId("gameinfo@netobj.ddnet.tw"));
+	}
+
+	getObjExDDNetProjectile(id: number): DDNetProjectile | undefined {
+		return this.getParsed(this.getTypeId("projectile@netobj.ddnet.tw"), id);
+	}
+	get AllObjExDDNetProjectile(): DDNetProjectile[] {
+		return this.getAll(this.getTypeId("projectile@netobj.ddnet.tw"));
+	}
+	
+	getObjExLaser(id: number): DDNetLaser | undefined {
+		return this.getParsed(this.getTypeId("laser@netobj.ddnet.tw"), id);
+	}
+	get AllObjExLaser(): DDNetLaser[] {
+		return this.getAll(this.getTypeId("laser@netobj.ddnet.tw"));
+	}
+	
+	
+
 
 
 	get OwnID(): number | undefined {

@@ -1,6 +1,7 @@
+import { UUIDManager, createTwMD5Hash } from "./UUIDManager";
 import { Client } from "./client";
 import { MsgUnpacker } from "./MsgUnpacker";
-import { PlayerInput, PlayerInfo, Projectile, Laser, Pickup, Flag, GameInfo, GameData, CharacterCore, Character, ClientInfo, SpectatorInfo, Common, Explosion, Spawn, HammerHit, Death, SoundGlobal, SoundWorld, DamageInd } from "./snapshots";
+import { PlayerInput, PlayerInfo, Projectile, Laser, Pickup, Flag, GameInfo, GameData, CharacterCore, Character, ClientInfo, SpectatorInfo, Common, Explosion, Spawn, HammerHit, Death, SoundGlobal, SoundWorld, DamageInd, MyOwnObject, DDNetCharacter, DDNetPlayer, GameInfoEx, DDNetProjectile, DDNetLaser } from "./snapshots";
 var decoder = new TextDecoder('utf-8');
 
 const ___itemAppendix: {"type_id": number, "size": number, "name": string}[] = [ // only used for the events underneath. the actual itemAppendix below this is only used for size
@@ -75,15 +76,28 @@ export enum items {
 }
 
 export declare type Item = PlayerInput | PlayerInfo | Projectile | Laser | Pickup | Flag | GameInfo | GameData | CharacterCore | Character | PlayerInfo | ClientInfo | SpectatorInfo | Common | Explosion | Spawn |HammerHit | Death | SoundGlobal | SoundWorld | DamageInd;
+export declare type DDNetItem = MyOwnObject | DDNetCharacter | DDNetPlayer | GameInfoEx | DDNetProjectile | DDNetLaser;
 interface eSnap {
 	Snapshot: {Key: number, Data: number[]},
 	ack: number,
 }
+
+// https://github.com/ddnet/ddnet/blob/571b0b36de83d18f2524ee371fc3223d04b94135/datasrc/network.py#L236
+let supported_uuids = [
+	"my-own-object@heinrich5991.de",
+	"character@netobj.ddnet.tw", // validate_size=False
+	"player@netobj.ddnet.tw",
+	"gameinfo@netobj.ddnet.tw", // validate_size=False
+	"projectile@netobj.ddnet.tw",
+	"laser@netobj.ddnet.tw",
+]
+
 export class Snapshot {
-	deltas: {'data': number[], 'parsed': Item, 'type_id': number, 'id': number, 'key': number}[] = [];
+	deltas: {'data': number[], 'parsed': Item | DDNetItem, 'type_id': number, 'id': number, 'key': number}[] = [];
 	eSnapHolder: eSnap[] = [];
 	crc_errors: number = 0;
 	client: Client;
+	uuid_manager: UUIDManager = new UUIDManager(32767, true); // snapshot max_type
 
 	constructor(_client: Client) {
 		this.client = _client;
@@ -108,8 +122,69 @@ export class Snapshot {
     	pStr = pStr.replace(/\0.*/g, ''); // Remove content from first null char to end.
 		return pStr;
 	}
-	private parseItem(data: number[], Type: number, id: number): Item {
-		var _item = {} as Item; 
+	private parseItem(data: number[], Type: number, id: number): Item | DDNetItem {
+		var _item = {} as Item | DDNetItem; 
+		if (Type >= 0x4000) { // offset uuid type
+			if (this.uuid_manager.LookupType(Type)?.name == "my-own-object@heinrich5991.de") {
+				_item = {
+					m_Test: data[0]
+				} as MyOwnObject;
+			} else if (this.uuid_manager.LookupType(Type)?.name == "character@netobj.ddnet.tw") {
+				_item = {
+					m_Flags: data[0],
+					m_FreezeEnd: data[1],
+					m_Jumps: data[2],
+					m_TeleCheckpoint: data[3],
+					m_StrongWeakID: data[4],
+			
+					// # New data fields for jump display, freeze bar and ninja bar
+					// # Default values indicate that these values should not be used
+					m_JumpedTotal: data[5] ?? null,
+					m_NinjaActivationTick: data[6] ?? null,
+					m_FreezeStart: data[7] ?? null,
+					// # New data fields for improved target accuracy
+					m_TargetX: data[8] ?? null,
+					m_TargetY: data[9] ?? null,
+					id: id
+			
+				} as DDNetCharacter;
+			} 
+			else if (this.uuid_manager.LookupType(Type)?.name == "player@netobj.ddnet.tw") {
+				_item = {
+					m_Flags: data[0],
+					m_AuthLevel: data[1],
+					id: id
+				} as DDNetPlayer
+			} 
+			else if (this.uuid_manager.LookupType(Type)?.name == "gameinfo@netobj.ddnet.tw") {
+				_item = {
+					m_Flags: data[0],
+					m_Version: data[1],
+					m_Flags2: data[2]
+				} as GameInfoEx
+			} 
+			else if (this.uuid_manager.LookupType(Type)?.name == "projectile@netobj.ddnet.tw") {
+				_item = {
+					m_X: data[0],
+					m_Y: data[1],
+					m_Angle: data[2],
+					m_Data: data[3],
+					m_Type: data[3],
+					m_StartTick: data[3]
+				} as DDNetProjectile
+			} 
+			else if (this.uuid_manager.LookupType(Type)?.name == "laser@netobj.ddnet.tw") {
+				_item = {
+					m_ToX: data[0],
+					m_ToY: data[1],
+					m_FromX: data[2],
+					m_FromY: data[3],
+					m_Owner: data[3],
+					m_Type: data[3]
+				} as DDNetLaser
+			} 
+			return _item;
+		}
 		switch (Type) {
 			case items.OBJ_EX:
 				break;
@@ -374,7 +449,7 @@ export class Snapshot {
 		* https://github.com/heinrich5991/libtw2/blob/master/snapshot/src/
 		* https://github.com/heinrich5991/libtw2/blob/master/doc/snapshot.md
 		*/ 
-		var _events: {type_id: number, parsed: Item}[] = [];
+		var _events: {type_id: number, parsed: Item | DDNetItem}[] = [];
 		
 		let num_removed_items = unpacker.unpackInt();
 		let num_item_deltas = unpacker.unpackInt();
@@ -434,38 +509,63 @@ export class Snapshot {
 					changed = true;
 				} // else no previous, use new data
 			} 
-			let parsed: Item;
-			if (!changed) {
-				let oldDelta = oldDeltas.find(delta => delta.key == key); 
-				if (oldDelta !== undefined && compareArrays(data, oldDelta.data)) {
-					parsed = oldDelta.parsed;
-
+			let parsed: Item | DDNetItem;
+			if (type_id !== 0) {
+				if (!changed) {
+					let oldDelta = oldDeltas.find(delta => delta.key == key); 
+					if (oldDelta !== undefined && compareArrays(data, oldDelta.data)) {
+						parsed = oldDelta.parsed;
+	
+					} else 
+						parsed = this.parseItem(data, type_id, id)
+						
 				} else 
 					parsed = this.parseItem(data, type_id, id)
 					
-			} else 
-				parsed = this.parseItem(data, type_id, id)
-			
-			this.eSnapHolder.push({Snapshot: {Data: data, Key: key}, ack: recvTick});
+					this.eSnapHolder.push({Snapshot: {Data: data, Key: key}, ack: recvTick});
+					
+					this.deltas.push({
+						data, 
+						key, 
+						id, 
+						type_id, 
+						parsed
+					});
+					if (type_id >= items.EVENT_COMMON && type_id <= items.EVENT_DAMAGE_INDICATOR) {
+						// this.client.SnapshotUnpacker.
+						
+						_events.push({type_id, parsed});
+						// this.client.SnapshotUnpacker.emit(___itemAppendix[type_id].name, parsed);
+					}
+			} else {
 
-			this.deltas.push({
-				data, 
-				key, 
-				id, 
-				type_id, 
-				parsed
-			});
-		
-			if (type_id >= items.EVENT_COMMON && type_id <= items.EVENT_DAMAGE_INDICATOR) {
-				// this.client.SnapshotUnpacker.
+				this.eSnapHolder.push({Snapshot: {Data: data, Key: key}, ack: recvTick});
+					
+				this.deltas.push({
+					data, 
+					key, 
+					id, 
+					type_id, 
+					parsed: {} as Item
+				});
+
+				let test = (int: number) => [(int >> 24) & 0xff, (int >> 16) & 0xff, (int >> 8) & 0xff, (int) & 0xff ];
+				let test2 = (ints: number[]) => ints.map(a => test(a)).flat();
 				
-				_events.push({type_id, parsed});
-				// this.client.SnapshotUnpacker.emit(___itemAppendix[type_id].name, parsed);
+				let targetUUID = Buffer.from(test2(data));
+				if (!this.uuid_manager.LookupType(id)) {
+					
+					supported_uuids.forEach((a, i) => {
+						let uuid = createTwMD5Hash(a);
+						if (targetUUID.compare(uuid) == 0) {
+							this.uuid_manager.RegisterName(a, id);
+							supported_uuids.splice(i, 1);
+						}
+					})
+				}
 			}
-
-
-
 		}
+		
 		
 		for (let newSnap of deltaSnaps) {
 			if (deleted.includes(newSnap.Snapshot.Key)) {
@@ -494,7 +594,6 @@ export class Snapshot {
 		if (_crc !== WantedCrc) {
 			this.deltas = oldDeltas;
 			this.crc_errors++;
-			console.log("crc error", _crc, WantedCrc, this.crc_errors)
 			if (this.crc_errors > 5) {
 				recvTick = -1;
 				this.crc_errors = 0;
@@ -528,7 +627,6 @@ function UndiffItem(oldItem: number[], newItem: number[]): number[] {
 		if (a !== undefined && out[i] !== undefined) {
 			out[i] += a;
 		} else {
-			console.log("UNDEFINED UNDEFINED UNDEFINED")
 			out[i] = 0;
 		}
 	})

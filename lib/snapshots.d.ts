@@ -110,14 +110,6 @@ export declare interface ClientInfo {
     id: number
 }
 
-export declare interface DdnetCharacter {
-    flags: number,
-    freeze_end: number,
-    jumps: number,
-    tele_checkpoint: number,
-    strong_weak_id: number,
-}
-
 export declare interface SpectatorInfo {
     spectator_id: number,
     x: number,
@@ -182,4 +174,60 @@ export declare enum items {
 	EVENT_SOUND_GLOBAL,
 	EVENT_SOUND_WORLD,
 	EVENT_DAMAGE_INDICATOR
+}
+
+export declare interface MyOwnObject {
+    m_Test: number
+}
+
+export declare interface DDNetCharacter {
+    m_Flags: number,
+    m_FreezeEnd: number,
+    m_Jumps: number,
+    m_TeleCheckpoint: number,
+    m_StrongWeakID: number,
+
+    // # New data fields for jump display, freeze bar and ninja bar
+    // # Default values indicate that these values should not be used
+    m_JumpedTotal?: number,
+    m_NinjaActivationTick?: number,
+    m_FreezeStart?: number,
+    // # New data fields for improved target accuracy
+    m_TargetX?: number,
+    m_TargetY?: number,
+    id: number
+} //, validate_size=False),
+/** m_AuthLevel "AUTHED_NO", "AUTHED_ADMIN" */
+export declare interface DDNetPlayer {
+    m_Flags: number,
+    m_AuthLevel: number,
+    id: number
+}
+
+export declare interface GameInfoEx {
+
+    m_Flags: number,
+    m_Version: number,
+    m_Flags2: number,
+}//, validate_size=False),
+
+// # The code assumes that this has the same in-memory representation as
+// # the Projectile net object.
+export declare interface DDNetProjectile {
+    m_X: number,
+    m_Y: number,
+    m_Angle: number,
+    m_Data: number,
+    m_Type: number,
+    m_StartTick: number,
+}
+
+export declare interface DDNetLaser {
+    m_ToX: number,
+    m_ToY: number,
+    m_FromX: number,
+    m_FromY: number,
+    m_StartTick: number,
+    m_Owner: number,
+    m_Type: number,
 }

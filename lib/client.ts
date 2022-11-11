@@ -756,13 +756,13 @@ export class Client extends EventEmitter {
 								let packer = new MsgPacker(0, true, 1);
 								if (uuid !== undefined) {
 									// IT_IS msg
-									packer.AddBuffer(this.UUIDManager.LookupType(NETMSG_Sys.NETMSG_ITIS).hash);
+									packer.AddBuffer(this.UUIDManager.LookupType(NETMSG_Sys.NETMSG_ITIS)!.hash);
 									
 									packer.AddBuffer(Uuid);
 									packer.AddString(uuid.name);
 								} else {
 									// dont_know msg
-									packer.AddBuffer(this.UUIDManager.LookupType(NETMSG_Sys.NETMSG_IDONTKNOW).hash);
+									packer.AddBuffer(this.UUIDManager.LookupType(NETMSG_Sys.NETMSG_IDONTKNOW)!.hash);
 									
 									packer.AddBuffer(Uuid);
 								}
@@ -826,7 +826,7 @@ export class Client extends EventEmitter {
 								// https://github.com/ddnet/ddnet/blob/06e3eb564150e9ab81b3a5595c48e9fe5952ed32/src/engine/client/client.cpp#L1565
 							} else if (chunk.msgid == NETMSG_Sys.NETMSG_PINGEX) {
 								let packer = new MsgPacker(0, true, 2);
-								packer.AddBuffer(this.UUIDManager.LookupType(NETMSG_Sys.NETMSG_PONGEX).hash);
+								packer.AddBuffer(this.UUIDManager.LookupType(NETMSG_Sys.NETMSG_PONGEX)!.hash);
 
 								this.SendMsgEx(packer, 2);
 							}
