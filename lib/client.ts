@@ -283,7 +283,6 @@ export class Client extends EventEmitter {
 
 		this.lastSentMessages = [];
 
-
 		this.movement = new Movement();
 		
 		this.game = new Game(this);
@@ -291,19 +290,20 @@ export class Client extends EventEmitter {
 
 		this.UUIDManager = new UUIDManager();
 		
-		this.UUIDManager.RegisterName("what-is@ddnet.tw");
-		this.UUIDManager.RegisterName("it-is@ddnet.tw");
-		this.UUIDManager.RegisterName("i-dont-know@ddnet.tw");
+		
+		this.UUIDManager.RegisterName("what-is@ddnet.tw", NETMSG_Sys.NETMSG_WHATIS);
+		this.UUIDManager.RegisterName("it-is@ddnet.tw", NETMSG_Sys.NETMSG_ITIS);
+		this.UUIDManager.RegisterName("i-dont-know@ddnet.tw", NETMSG_Sys.NETMSG_IDONTKNOW);
 
-		this.UUIDManager.RegisterName("rcon-type@ddnet.tw");
-		this.UUIDManager.RegisterName("map-details@ddnet.tw");
-		this.UUIDManager.RegisterName("capabilities@ddnet.tw");
-		this.UUIDManager.RegisterName("clientver@ddnet.tw");
-		this.UUIDManager.RegisterName("ping@ddnet.tw");
-		this.UUIDManager.RegisterName("pong@ddnet.tw");
-		this.UUIDManager.RegisterName("checksum-request@ddnet.tw");
-		this.UUIDManager.RegisterName("checksum-response@ddnet.tw");
-		this.UUIDManager.RegisterName("checksum-error@ddnet.tw");
+		this.UUIDManager.RegisterName("rcon-type@ddnet.tw", NETMSG_Sys.NETMSG_RCONTYPE);
+		this.UUIDManager.RegisterName("map-details@ddnet.tw", NETMSG_Sys.NETMSG_MAP_DETAILS);
+		this.UUIDManager.RegisterName("capabilities@ddnet.tw", NETMSG_Sys.NETMSG_CAPABILITIES);
+		this.UUIDManager.RegisterName("clientver@ddnet.tw", NETMSG_Sys.NETMSG_CLIENTVER);
+		this.UUIDManager.RegisterName("ping@ddnet.tw", NETMSG_Sys.NETMSG_PING);
+		this.UUIDManager.RegisterName("pong@ddnet.tw", NETMSG_Sys.NETMSG_PONGEX);
+		this.UUIDManager.RegisterName("checksum-request@ddnet.tw", NETMSG_Sys.NETMSG_CHECKSUM_REQUEST);
+		this.UUIDManager.RegisterName("checksum-response@ddnet.tw", NETMSG_Sys.NETMSG_CHECKSUM_RESPONSE);
+		this.UUIDManager.RegisterName("checksum-error@ddnet.tw", NETMSG_Sys.NETMSG_CHECKSUM_ERROR);
 
 	}
 
@@ -749,7 +749,6 @@ export class Client extends EventEmitter {
 						}
 						
 						if (chunk.msgid >= NETMSG_Sys.NETMSG_WHATIS && chunk.msgid <= NETMSG_Sys.NETMSG_CHECKSUM_ERROR) {
-
 							if (chunk.msgid == NETMSG_Sys.NETMSG_WHATIS) {
 								let Uuid = chunk.raw.slice(0, 16);
 
