@@ -282,13 +282,14 @@ export class Client extends EventEmitter {
 		this.lastRecvTime = new Date().getTime();
 
 		this.lastSentMessages = [];
+
+
 		this.movement = new Movement();
 		
 		this.game = new Game(this);
 		this.SnapshotUnpacker = new SnapshotWrapper(this);
 
 		this.UUIDManager = new UUIDManager();
-		
 		
 		this.UUIDManager.RegisterName("what-is@ddnet.tw");
 		this.UUIDManager.RegisterName("it-is@ddnet.tw");
@@ -514,7 +515,7 @@ export class Client extends EventEmitter {
 			} else if (this.State == States.STATE_OFFLINE) 
 				clearInterval(predTimer);
 			
-		}, 20);
+		}, 1000/50); // 50 ticks per second
 
 		this.SendControlMsg(1, "TKEN")
 		let connectInterval = setInterval(() => {
@@ -531,7 +532,7 @@ export class Client extends EventEmitter {
 					return;
 				this.time = new Date().getTime();
 				this.sendInput();
-			}, 500)
+			}, 50)
 		}
 
 		let resendTimeout = setInterval(() => {
@@ -732,10 +733,10 @@ export class Client extends EventEmitter {
 								
 								this.emit("snapshot", snapUnpacked.items);
 								this.AckGameTick = snapUnpacked.recvTick;
-								if (Math.abs(this.PredGameTick - this.AckGameTick) > 10)
+								if (Math.abs(this.PredGameTick - this.AckGameTick) > 10) {
 									this.PredGameTick = this.AckGameTick + 1;
-
-								this.sendInput();
+									this.sendInput();
+								}
 							} 
 
 
