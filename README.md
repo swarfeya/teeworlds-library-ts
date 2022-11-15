@@ -87,3 +87,7 @@ process.stdin.on("data", data => {
 	
 })
 ```
+
+# Documentation
+You can find an documentation to what most components do in the [docs/documentation.md](docs/documentation.md).
+You can also find a few of examples inside of the [docs/examples](docs/examples/) directory.
