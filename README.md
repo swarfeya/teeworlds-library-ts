@@ -1,6 +1,7 @@
 # tw-chatonly
 Library to connect a bot to a Teeworlds server.
 
+https://gitlab.com/swarfey/teeworlds-client/-/tree/main/
 https://www.npmjs.com/package/teeworlds
 
 
@@ -89,5 +90,5 @@ process.stdin.on("data", data => {
 ```
 
 # Documentation
-You can find an documentation to what most components do in the [docs/documentation.md](docs/documentation.md).
-You can also find a few of examples inside of the [docs/examples](docs/examples/) directory.
+You can find an documentation to what most components do in the [docs/documentation.md](https://gitlab.com/swarfey/teeworlds-client/-/blob/main/docs/documentation.md).
+You can also find a few examples inside of the [docs/examples](https://gitlab.com/swarfey/teeworlds-client/-/tree/main/docs/examples) directory.
