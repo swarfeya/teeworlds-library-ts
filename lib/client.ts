@@ -122,7 +122,9 @@ enum NETMSG_Sys {
 	NETMSG_PONGEX,
 	NETMSG_CHECKSUM_REQUEST,
 	NETMSG_CHECKSUM_RESPONSE,
-	NETMSG_CHECKSUM_ERROR
+	NETMSG_CHECKSUM_ERROR,
+
+	NETMSG_REDIRECT,
 
 }
 
@@ -305,6 +307,7 @@ export class Client extends EventEmitter {
 		this.UUIDManager.RegisterName("checksum-request@ddnet.tw", NETMSG_Sys.NETMSG_CHECKSUM_REQUEST);
 		this.UUIDManager.RegisterName("checksum-response@ddnet.tw", NETMSG_Sys.NETMSG_CHECKSUM_RESPONSE);
 		this.UUIDManager.RegisterName("checksum-error@ddnet.tw", NETMSG_Sys.NETMSG_CHECKSUM_ERROR);
+		this.UUIDManager.RegisterName("redirect@ddnet.org", NETMSG_Sys.NETMSG_REDIRECT);
 
 	}
 
