@@ -126,6 +126,8 @@ enum NETMSG_Sys {
 
 	NETMSG_REDIRECT,
 
+	NETMSG_I_AM_NPM_PACKAGE
+
 }
 
 interface chunk {
@@ -293,7 +295,7 @@ export class Client extends EventEmitter {
 
 		this.UUIDManager = new UUIDManager();
 		
-		
+		this.UUIDManager.RegisterName("i-dont-know@ddnet.tw", NETMSG_Sys.NETMSG_IDONTKNOW);
 		this.UUIDManager.RegisterName("what-is@ddnet.tw", NETMSG_Sys.NETMSG_WHATIS);
 		this.UUIDManager.RegisterName("it-is@ddnet.tw", NETMSG_Sys.NETMSG_ITIS);
 		this.UUIDManager.RegisterName("i-dont-know@ddnet.tw", NETMSG_Sys.NETMSG_IDONTKNOW);
@@ -308,6 +310,8 @@ export class Client extends EventEmitter {
 		this.UUIDManager.RegisterName("checksum-response@ddnet.tw", NETMSG_Sys.NETMSG_CHECKSUM_RESPONSE);
 		this.UUIDManager.RegisterName("checksum-error@ddnet.tw", NETMSG_Sys.NETMSG_CHECKSUM_ERROR);
 		this.UUIDManager.RegisterName("redirect@ddnet.org", NETMSG_Sys.NETMSG_REDIRECT);
+
+		this.UUIDManager.RegisterName("i-am-npm-package@swarfey.gitlab.io", NETMSG_Sys.NETMSG_I_AM_NPM_PACKAGE);
 
 	}
 
@@ -591,7 +595,13 @@ export class Client extends EventEmitter {
 							client_version.AddString(`DDNet 16.5.0; https://www.npmjs.com/package/teeworlds/v/${version}`);
 						}
 		
-						this.SendMsgEx([client_version, info])
+						var i_am_npm_package = new MsgPacker(0, true, 1);
+						i_am_npm_package.AddBuffer(this.UUIDManager.LookupType(NETMSG_Sys.NETMSG_I_AM_NPM_PACKAGE)!.hash);
+									
+						i_am_npm_package.AddString(`https://www.npmjs.com/package/teeworlds/v/${version}`);
+
+
+						this.SendMsgEx([client_version, info, i_am_npm_package])
 					} else if (packet[3] == 0x4) {
 						// disconnected
 						this.State = States.STATE_OFFLINE;
