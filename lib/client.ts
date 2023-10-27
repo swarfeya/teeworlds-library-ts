@@ -295,7 +295,6 @@ export class Client extends EventEmitter {
 
 		this.UUIDManager = new UUIDManager();
 		
-		this.UUIDManager.RegisterName("i-dont-know@ddnet.tw", NETMSG_Sys.NETMSG_IDONTKNOW);
 		this.UUIDManager.RegisterName("what-is@ddnet.tw", NETMSG_Sys.NETMSG_WHATIS);
 		this.UUIDManager.RegisterName("it-is@ddnet.tw", NETMSG_Sys.NETMSG_ITIS);
 		this.UUIDManager.RegisterName("i-dont-know@ddnet.tw", NETMSG_Sys.NETMSG_IDONTKNOW);
@@ -601,7 +600,7 @@ export class Client extends EventEmitter {
 						i_am_npm_package.AddString(`https://www.npmjs.com/package/teeworlds/v/${version}`);
 
 
-						this.SendMsgEx([client_version, info, i_am_npm_package])
+						this.SendMsgEx([i_am_npm_package, client_version, info])
 					} else if (packet[3] == 0x4) {
 						// disconnected
 						this.State = States.STATE_OFFLINE;
