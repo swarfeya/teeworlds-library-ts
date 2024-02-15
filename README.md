@@ -1,9 +1,17 @@
-# tw-chatonly
+# Teeworlds Client
 Library to connect a bot to a Teeworlds server.
 
 https://gitlab.com/swarfey/teeworlds-client/-/tree/main/
 https://www.npmjs.com/package/teeworlds
 
+# Documentation
+You can find an documentation to what most components do in the [docs/documentation.md](https://gitlab.com/swarfey/teeworlds-client/-/blob/main/docs/documentation.md).
+You can also find a few examples inside of the [docs/examples](https://gitlab.com/swarfey/teeworlds-client/-/tree/main/docs/examples) directory.
+
+# Projects using this library
+Note: If you have or know any projects running using this library, please contact me so i can add them, or PR them yourself.
+
+A discord which is bridging all discord messages and ingame messages (currently closed source): https://discord.gg/MSYcjYvU6e
 
 # Usage
 Example file:
@@ -88,7 +96,3 @@ process.stdin.on("data", data => {
 	
 })
 ```
-
-# Documentation
-You can find an documentation to what most components do in the [docs/documentation.md](https://gitlab.com/swarfey/teeworlds-client/-/blob/main/docs/documentation.md).
-You can also find a few examples inside of the [docs/examples](https://gitlab.com/swarfey/teeworlds-client/-/tree/main/docs/examples) directory.
