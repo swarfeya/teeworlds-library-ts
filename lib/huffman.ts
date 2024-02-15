@@ -34,7 +34,7 @@ interface HuffmanConstructNode {
 	frequency: number;
 }
 
-class Huffman {
+export class Huffman {
 	nodes: HuffmanNode[];
 	decode_lut: number[];
 	num_nodes: number;
@@ -224,5 +224,3 @@ class Huffman {
 
 		
 	}
-
-export = Huffman;

@@ -11,7 +11,7 @@ import { PlayerInput, PlayerInfo, Projectile, Laser, Pickup, Flag, GameInfo, Gam
 
 import { MsgPacker } from './MsgPacker';
 import { Item, Snapshot } from './snapshot';
-import Huffman from "./huffman";
+import { Huffman } from "./huffman";
 import { Game } from "./components/game";
 import { SnapshotWrapper } from "./components/snapshot";
 
