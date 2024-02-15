@@ -723,7 +723,7 @@ export class Client extends EventEmitter {
 							PartSize = unpacker.unpackInt();
 						}
 
-						if (PartSize < 1 || NumParts > 64 || Part < 0 || Part >= NumParts || PartSize <= 0 || PartSize > 900)
+						if (NumParts < 1 || NumParts > 64 || Part < 0 || Part >= NumParts || PartSize < 0 || PartSize > 900)
 							return;
 
 						if (GameTick >= this.currentSnapshotGameTick) {
