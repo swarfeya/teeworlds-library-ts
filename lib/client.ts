@@ -1,3 +1,5 @@
+
+
 import { randomBytes } from "crypto";
 
 import net from 'dgram';
@@ -133,7 +135,6 @@ enum NETMSG_Sys {
 interface chunk {
 	bytes: number,
 	flags: number,
-	sequence?: number,
 	seq?: number,
 	// type: 'sys' | 'game',
 	sys: Boolean,
@@ -211,6 +212,7 @@ export class Client extends EventEmitter {
 	private State: number; // 0 = offline; 1 = STATE_CONNECTING = 1, STATE_LOADING = 2, STATE_ONLINE = 3
 	private ack: number;
 	private clientAck: number;
+	private lastCheckedChunkAck: number;
 	private receivedSnaps: number; /* wait for 2 ss before seeing self as connected */
 	private socket: net.Socket | undefined;
 	private TKEN: Buffer;
@@ -277,6 +279,7 @@ export class Client extends EventEmitter {
 		this.State = States.STATE_OFFLINE; // 0 = offline; 1 = STATE_CONNECTING = 1, STATE_LOADING = 2, STATE_ONLINE = 3
 		this.ack = 0; // ack of messages the client has received
 		this.clientAck = 0; // ack of messages the client has sent
+		this.lastCheckedChunkAck = 0; // this.ack gets reset to this when flushing - used for resetting tick on e.g. map change
 		this.receivedSnaps = 0; /* wait for 2 snaps before seeing self as connected */
 		this.socket = net.createSocket("udp4");
 		this.socket.bind();
@@ -314,6 +317,16 @@ export class Client extends EventEmitter {
 
 	}
 
+	private OnEnterGame() {
+		this.snaps = [];
+		this.SnapUnpacker = new Snapshot(this);
+		this.SnapshotParts = 0;
+		this.receivedSnaps = 0;
+		this.SnapshotUnpacker = new SnapshotWrapper(this);
+		this.currentSnapshotGameTick = 0;
+		this.AckGameTick = -1;
+		this.PredGameTick = 0;
+	}
 	private ResendAfter(lastAck: number) {
 		this.clientAck = lastAck;
 		
@@ -349,7 +362,6 @@ export class Client extends EventEmitter {
 			var chunk: chunk = {} as chunk;
 			chunk.bytes = ((packet[0] & 0x3f) << 4) | (packet[1] & ((1 << 4) - 1));
 			chunk.flags = (packet[0] >> 6) & 3;
-			chunk.sequence = -1;
 
 			if (chunk.flags & 1) {
 				chunk.seq = ((packet[1] & 0xf0) << 2) | packet[2];
@@ -459,9 +471,18 @@ export class Client extends EventEmitter {
 		this.socket.send(packet, 0, packet.length, this.port, this.host)
 	}
 	
-	/** Queue a chunk (It will get sent in the next packet). */
+	/** Queue a chunk (instantly sent if flush flag is set - otherwise it will be sent in the next packet). */
 	QueueChunkEx(Msg: MsgPacker) {
+		if (this.queueChunkEx.length > 0) {
+			let total_size = 0;
+			for (let chunk of this.queueChunkEx)
+				total_size += chunk.size;
+			if (total_size + Msg.size + 3 > 1394 - 4)
+				this.Flush();
+		}
 		this.queueChunkEx.push(Msg);
+		if (Msg.flag & 4)
+			this.Flush();
 	}
 	
 	/**  Send a Raw Buffer (as chunk) to the server. */
@@ -485,7 +506,6 @@ export class Client extends EventEmitter {
 		var chunk: chunk = {} as chunk;
 		chunk.bytes = ((packet[0] & 0x3f) << 4) | (packet[1] & ((1 << 4) - 1));
 		chunk.flags = (packet[0] >> 6) & 3;
-		chunk.sequence = -1;
 		
 		if (chunk.flags & 1) {
 			chunk.seq = ((packet[1]&0xf0)<<2) | packet[2];
@@ -509,7 +529,14 @@ export class Client extends EventEmitter {
 		}
 		return chunk;
 	}
+	Flush() {
+		// if (this.queueChunkEx.length == 0)
+		console.log("flushing");
+		this.SendMsgEx(this.queueChunkEx);
+		this.queueChunkEx = [];
+		this.ack = this.lastCheckedChunkAck;
 
+	}
 	
 	/** Connect the client to the server. */
 	connect() { 
@@ -533,8 +560,10 @@ export class Client extends EventEmitter {
 		}, 500);
 		if (!this.options?.lightweight) {
 			let inputInterval = setInterval(() => {
-				if (this.State == States.STATE_OFFLINE)
+				if (this.State == States.STATE_OFFLINE) {
 					clearInterval(inputInterval)
+					console.log("???");
+				}
 				if (this.State != States.STATE_ONLINE)
 					return;
 				this.time = new Date().getTime();
@@ -615,10 +644,20 @@ export class Client extends EventEmitter {
 				}
 				
 				var unpacked: _packet = this.Unpack(packet);
-				unpacked.chunks = unpacked.chunks.filter(chunk => ((chunk.flags & 2) && (chunk.flags & 1)) ? chunk.seq! > this.ack : true); // filter out already received chunks
-				
+				// unpacked.chunks = unpacked.chunks.filter(chunk => ((chunk.flags & 2) && (chunk.flags & 1)) ? chunk.seq! > this.ack : true); // filter out already received chunks
+				this.sentChunkQueue.forEach((buff, i) => {
+					let chunkFlags = (buff[0] >> 6) & 3;
+					if (chunkFlags & 1) {
+						let chunk = this.MsgToChunk(buff);
+						if (chunk.seq && chunk.seq >= this.ack)
+							this.sentChunkQueue.splice(i, 1);
+					} 
+				})
 				unpacked.chunks.forEach(chunk => {
+					if (!(((chunk.flags & 2) && (chunk.flags & 1)) ? chunk.seq! > this.ack : true))
+						return; // filter out already received chunks
 					if (chunk.flags & 1 && (chunk.flags !== 15)) { // vital and not connless
+						this.lastCheckedChunkAck = chunk.seq!;
 						if (chunk.seq === (this.ack+1)%(1<<10)) { // https://github.com/nobody-mb/twchatonly/blob/master/chatonly.cpp#L237
 							this.ack = chunk.seq!;
 							
@@ -628,29 +667,17 @@ export class Client extends EventEmitter {
 							let Bottom = (this.ack - (1<<10)/2);
 							
 							if(Bottom < 0) {
-								if((chunk.seq! <= this.ack) || (chunk.seq! >= (Bottom + (1<<10))))
-									return;
+								if((chunk.seq! <= this.ack) || (chunk.seq! >= (Bottom + (1<<10)))) {}
+								else
+									this.requestResend = true;
 							} else {
-								if(chunk.seq! <= this.ack && chunk.seq! >= Bottom)
-									return;
+								if(chunk.seq! <= this.ack && chunk.seq! >= Bottom) {}
+								else
+									this.requestResend = true;
 							}
-							this.requestResend = true;
-							
 						}
 					}
 
-				})
-				this.sentChunkQueue.forEach((buff, i) => {
-					let chunkFlags = (buff[0] >> 6) & 3;
-					if (chunkFlags & 1) {
-						let chunk = this.MsgToChunk(buff);
-						if (chunk.seq && chunk.seq >= this.ack)
-							this.sentChunkQueue.splice(i, 1);
-					} 
-				})
-				
-				
-				unpacked.chunks.forEach((chunk, index) => {
 					if (chunk.sys) { 
 						// system messages
 						if (chunk.msgid == NETMSG_Sys.NETMSG_PING) { // ping
@@ -665,6 +692,7 @@ export class Client extends EventEmitter {
 						// https://ddnet.org/docs/libtw2/connection/
 
 						if (chunk.msgid == NETMSG_Sys.NETMSG_MAP_CHANGE) {
+							this.Flush();
 							var Msg = new MsgPacker(NETMSG_Sys.NETMSG_READY, true, 1); /* ready */
 							this.SendMsgEx(Msg);		
 						} else if (chunk.msgid == NETMSG_Sys.NETMSG_CON_READY) {
@@ -936,16 +964,22 @@ export class Client extends EventEmitter {
 						// packets neccessary for connection
 						// https://ddnet.org/docs/libtw2/connection/
 						if (chunk.msgid == NETMSG_Game.SV_READYTOENTER) {
-							var Msg = new MsgPacker(15, true, 1); /* entergame */
+							var Msg = new MsgPacker(NETMSG_Sys.NETMSG_ENTERGAME, true, 1); /* entergame */
 							this.SendMsgEx(Msg);
+							this.OnEnterGame();
 						}
 					}
 				})
 
-				
-				if (new Date().getTime() - this.time >= 1000 && this.State == States.STATE_ONLINE) {
-					this.time = new Date().getTime();
-					this.SendControlMsg(0);
+				if (this.State == States.STATE_ONLINE) {
+					if (new Date().getTime() - this.time >= 500) { 
+						this.Flush();
+					}
+					if (new Date().getTime() - this.time >= 1000) {
+						this.time = new Date().getTime();
+						this.SendControlMsg(0);
+					}
+
 				}
 			})
 	}
