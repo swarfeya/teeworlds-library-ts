@@ -10,7 +10,7 @@ export enum States {
 
 export namespace NETMSG {
 
-	enum NETMSG_Game {
+	export const enum Game {
 		EX,
 		SV_MOTD,
 		SV_BROADCAST,
@@ -46,7 +46,7 @@ export namespace NETMSG {
 		NUM
 	}
 
-	enum NETMSG_Sys {
+	export const enum System {
 		NETMSG_EX = 0,
 
 		// the first thing sent by the client
@@ -110,6 +110,28 @@ export namespace NETMSG {
 
 	}
 
-	export const Game = NETMSG_Game;
-	export const System = NETMSG_Sys;
+}
+
+export const enum SnapshotItemIDs {
+    OBJ_EX,
+    OBJ_PLAYER_INPUT,
+    OBJ_PROJECTILE,
+    OBJ_LASER,
+    OBJ_PICKUP,
+    OBJ_FLAG,
+    OBJ_GAME_INFO,
+    OBJ_GAME_DATA,
+    OBJ_CHARACTER_CORE,
+    OBJ_CHARACTER,
+    OBJ_PLAYER_INFO,
+    OBJ_CLIENT_INFO,
+    OBJ_SPECTATOR_INFO,
+    EVENT_COMMON,
+    EVENT_EXPLOSION,
+    EVENT_SPAWN,
+    EVENT_HAMMERHIT,
+    EVENT_DEATH,
+    EVENT_SOUND_GLOBAL,
+    EVENT_SOUND_WORLD,
+    EVENT_DAMAGE_INDICATOR
 }

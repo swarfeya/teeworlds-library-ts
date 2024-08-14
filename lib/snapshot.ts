@@ -1,7 +1,7 @@
 import { UUIDManager, createTwMD5Hash } from "./UUIDManager";
 import { Client } from "./client";
 import { MsgUnpacker } from "./MsgUnpacker";
-import { SnapshotItemTypes, DeltaItem, DDNetItem, Item } from "./snapshots";
+import { SnapshotItemTypes, DeltaItem, DDNetItem, Item } from "./enums_types/types";
 var decoder = new TextDecoder('utf-8');
 
 const ___itemAppendix: {"type_id": number, "size": number, "name": string}[] = [ // only used for the events underneath. the actual itemAppendix below this is only used for size

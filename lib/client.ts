@@ -1,7 +1,8 @@
 
 
 import { randomBytes } from "crypto";
-
+// import * as test from 'dgram';
+import * as test from 'node:dns';
 import net from 'dgram';
 import { EventEmitter } from 'stream';
 
@@ -9,7 +10,7 @@ import { unpackString, MsgUnpacker } from "./MsgUnpacker";
 let { version } = require('../package.json');
 
 import Movement from './components/movement';
-import { DeltaItem, SnapshotItemTypes } from './snapshots';
+import { DeltaItem, SnapshotItemTypes } from './enums_types/types';
 
 import { MsgPacker } from './MsgPacker';
 import { Snapshot } from './snapshot';
@@ -18,7 +19,8 @@ import { Game } from "./components/game";
 import { SnapshotWrapper } from "./components/snapshot";
 
 import { UUIDManager } from "./UUIDManager";
-import { NETMSG, States } from "./protocol";
+import { NETMSG, States } from "./enums_types/protocol";
+import { Rcon } from "./components/rcon";
 
 const huff = new Huffman();
 
@@ -99,6 +101,7 @@ export class Client extends EventEmitter {
 		return super.emit(event, ...args);
 	}
 	
+	public rcon: Rcon;
 	private host: string;
 	private port: number;
 	private name: string;
@@ -145,15 +148,34 @@ export class Client extends EventEmitter {
   
 	constructor(ip: string, port: number, nickname: string, options?: iOptions) {
 		super();
+		
+<<<<<<<<<<<<<<  ✨ Codeium Command 🌟 >>>>>>>>>>>>>>>>
+		let host: string;
+		try {
+			const addr = new URL(`http://${ip}`);
+			host = addr.hostname;
+		} catch (_) {
+			host = ip;
+		}
+		this.host = host;
+		if (net.isIP(host) === 0) {
+			this.host = net.lookup(host, (err, address) => {
+				if (err) {
+					throw err;
+				}
+				this.host = address;
+			});
+		}
 		this.host = ip;
 		this.port = port;
+<<<<<<<  40d6c952-c5fc-47bd-889e-7b4308dd7315  >>>>>>>
 		this.name = nickname;
 		this.AckGameTick = 0;
 		this.PredGameTick = 0;
 		this.currentSnapshotGameTick = 0;
 
 		this.SnapshotParts = 0;
-		
+		this.rcon = new Rcon(this);
 		this.SnapUnpacker = new Snapshot(this);
 		// this.eSnapHolder = [];
 		this.requestResend = false;
@@ -365,7 +387,12 @@ export class Client extends EventEmitter {
 	}
 	
 	/** Queue a chunk (instantly sent if flush flag is set - otherwise it will be sent in the next packet). */
-	QueueChunkEx(Msg: MsgPacker) {
+	QueueChunkEx(Msg: MsgPacker | MsgPacker[]) {
+		if (Msg instanceof Array) {
+			for (let chunk of Msg)
+				this.QueueChunkEx(chunk);
+			return;
+		}
 		if (this.queueChunkEx.length > 0) {
 			let total_size = 0;
 			for (let chunk of this.queueChunkEx)
@@ -581,9 +608,8 @@ export class Client extends EventEmitter {
 						} else if (chunk.msgid == NETMSG.System.NETMSG_RCON_LINE) {
 							const unpacker = new MsgUnpacker(chunk.raw);
 							const msg = unpacker.unpackString();
-							this.emit('rcon_line', msg);
+							this.rcon.emit('rcon_line', msg);
 						}
-
 						// packets neccessary for connection
 						// https://ddnet.org/docs/libtw2/connection/
 
@@ -879,29 +905,6 @@ export class Client extends EventEmitter {
 				}
 			})
 	}
-	/** Rcon auth, set the `username` to empty string for authentication w/o username **/
-	rconAuth(username: string, password: string) {
-		const rconAuthMsg = new MsgPacker(NETMSG.System.NETMSG_RCON_AUTH, true, 1);
-		rconAuthMsg.AddString(username);
-		rconAuthMsg.AddString(password);
-		rconAuthMsg.AddInt(1);
-		this.SendMsgEx(rconAuthMsg);
-	}
-
-	/** Send rcon command **/
-	rcon(cmds: string[] | string) {
-		let _cmds: string[];
-		if (cmds instanceof Array) _cmds = cmds
-		else _cmds = [cmds];
-		const msgs: MsgPacker[] = [];
-		_cmds.forEach((cmd) => {
-			const rconCmdMsg = new MsgPacker(NETMSG.System.NETMSG_RCON_CMD, true, 1);
-			rconCmdMsg.AddString(cmd);
-			msgs.push(rconCmdMsg);
-		})
-		this.SendMsgEx(msgs);
-	}
-
 	/** Sending the input. (automatically done unless options.lightweight is on) */
 	sendInput(input = this.movement.input) { 
 		if (this.State != States.STATE_ONLINE)

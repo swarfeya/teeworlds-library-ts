@@ -1,8 +1,8 @@
 
 import { MsgPacker } from "../MsgPacker";
-import { SnapshotItemTypes } from "../snapshots";
+import { SnapshotItemTypes } from "../enums_types/types";
 import { Client } from "../client";
-import { NETMSG } from "../protocol";
+import { NETMSG } from "../enums_types/protocol";
 
 export class Game {
 	// SendMsgEx: (Msgs: MsgPacker[] | MsgPacker) => void;

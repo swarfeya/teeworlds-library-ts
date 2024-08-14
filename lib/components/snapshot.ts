@@ -1,7 +1,8 @@
 
 import { Client } from "../client";
 import { EventEmitter } from "stream";
-import { SnapshotItemTypes, SnapshotItemIDs } from "../snapshots";
+import { SnapshotItemTypes } from "../enums_types/types";
+import { SnapshotItemIDs } from "../enums_types/protocol";
 export declare interface SnapshotWrapper {
 	
 

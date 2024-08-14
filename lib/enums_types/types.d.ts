@@ -213,26 +213,3 @@ export namespace SnapshotItemTypes {
         m_Type: number,
     }
 }
-export enum SnapshotItemIDs {
-    OBJ_EX,
-    OBJ_PLAYER_INPUT,
-    OBJ_PROJECTILE,
-    OBJ_LASER,
-    OBJ_PICKUP,
-    OBJ_FLAG,
-    OBJ_GAME_INFO,
-    OBJ_GAME_DATA,
-    OBJ_CHARACTER_CORE,
-    OBJ_CHARACTER,
-    OBJ_PLAYER_INFO,
-    OBJ_CLIENT_INFO,
-    OBJ_SPECTATOR_INFO,
-    EVENT_COMMON,
-    EVENT_EXPLOSION,
-    EVENT_SPAWN,
-    EVENT_HAMMERHIT,
-    EVENT_DEATH,
-    EVENT_SOUND_GLOBAL,
-    EVENT_SOUND_WORLD,
-    EVENT_DAMAGE_INDICATOR
-}
