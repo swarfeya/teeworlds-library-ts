@@ -429,7 +429,6 @@ export class Client extends EventEmitter {
 			dnsLookup(this.host, 4, (err, address, family) => {
 				if (err) throw err;
 				this.host = address;
-				console.log(err, address, family)
 			})
 		}
  
