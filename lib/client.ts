@@ -1,8 +1,7 @@
 
 
 import { randomBytes } from "crypto";
-// import * as test from 'dgram';
-import * as test from 'node:dns';
+
 import net from 'dgram';
 import { EventEmitter } from 'stream';
 
@@ -10,7 +9,7 @@ import { unpackString, MsgUnpacker } from "./MsgUnpacker";
 let { version } = require('../package.json');
 
 import Movement from './components/movement';
-import { DeltaItem, SnapshotItemTypes } from './enums_types/types';
+import { _Packet, Chunk, DeltaItem, SnapshotItemTypes } from './enums_types/types';
 
 import { MsgPacker } from './MsgPacker';
 import { Snapshot } from './snapshot';
@@ -23,23 +22,6 @@ import { NETMSG, States } from "./enums_types/protocol";
 import { Rcon } from "./components/rcon";
 
 const huff = new Huffman();
-
-interface chunk {
-	bytes: number,
-	flags: number,
-	seq?: number,
-	// type: 'sys' | 'game',
-	sys: Boolean,
-	msgid: number,
-	msg: string,
-	raw: Buffer,
-	extended_msgid?: Buffer;
-}
-
-interface _packet {
-	twprotocol: { flags: number, ack: number, chunkAmount: number, size: number },
-	chunks: chunk[]
-}
 
 var messageTypes = [
 	["none, starts at 1", "SV_MOTD", "SV_BROADCAST", "SV_CHAT", "SV_KILL_MSG", "SV_SOUND_GLOBAL", "SV_TUNE_PARAMS", "SV_EXTRA_PROJECTILE", "SV_READY_TO_ENTER", "SV_WEAPON_PICKUP", "SV_EMOTICON", "SV_VOTE_CLEAR_OPTIONS", "SV_VOTE_OPTION_LIST_ADD", "SV_VOTE_OPTION_ADD", "SV_VOTE_OPTION_REMOVE", "SV_VOTE_SET", "SV_VOTE_STATUS", "CL_SAY", "CL_SET_TEAM", "CL_SET_SPECTATOR_MODE", "CL_START_INFO", "CL_CHANGE_INFO", "CL_KILL", "CL_EMOTICON", "CL_VOTE", "CL_CALL_VOTE", "CL_IS_DDNET", "SV_DDRACE_TIME", "SV_RECORD", "UNUSED", "SV_TEAMS_STATE", "CL_SHOW_OTHERS_LEGACY"],
@@ -148,27 +130,8 @@ export class Client extends EventEmitter {
   
 	constructor(ip: string, port: number, nickname: string, options?: iOptions) {
 		super();
-		
-<<<<<<<<<<<<<<  ✨ Codeium Command 🌟 >>>>>>>>>>>>>>>>
-		let host: string;
-		try {
-			const addr = new URL(`http://${ip}`);
-			host = addr.hostname;
-		} catch (_) {
-			host = ip;
-		}
-		this.host = host;
-		if (net.isIP(host) === 0) {
-			this.host = net.lookup(host, (err, address) => {
-				if (err) {
-					throw err;
-				}
-				this.host = address;
-			});
-		}
 		this.host = ip;
 		this.port = port;
-<<<<<<<  40d6c952-c5fc-47bd-889e-7b4308dd7315  >>>>>>>
 		this.name = nickname;
 		this.AckGameTick = 0;
 		this.PredGameTick = 0;
@@ -255,8 +218,8 @@ export class Client extends EventEmitter {
 		this.SendMsgEx(toResend);
 	}
 
-	private Unpack(packet: Buffer): _packet {
-		var unpacked: _packet = { twprotocol: { flags: packet[0] >> 4, ack: ((packet[0]&0xf)<<8) | packet[1], chunkAmount: packet[2], size: packet.byteLength - 3 }, chunks: [] }
+	private Unpack(packet: Buffer): _Packet {
+		var unpacked: _Packet = { twprotocol: { flags: packet[0] >> 4, ack: ((packet[0]&0xf)<<8) | packet[1], chunkAmount: packet[2], size: packet.byteLength - 3 }, chunks: [] }
 
 
 		if (packet.indexOf(Buffer.from([0xff, 0xff, 0xff, 0xff])) == 0 )// !(unpacked.twprotocol.flags & 8) || unpacked.twprotocol.flags == 255) // flags == 255 is connectionless (used for sending usernames)
@@ -274,7 +237,7 @@ export class Client extends EventEmitter {
 
 
 		for (let i = 0; i < unpacked.twprotocol.chunkAmount; i++) {
-			var chunk: chunk = {} as chunk;
+			var chunk: Chunk = {} as Chunk;
 			chunk.bytes = ((packet[0] & 0x3f) << 4) | (packet[1] & ((1 << 4) - 1));
 			chunk.flags = (packet[0] >> 6) & 3;
 
@@ -423,7 +386,7 @@ export class Client extends EventEmitter {
 	}
 
 	private MsgToChunk(packet: Buffer) {
-		var chunk: chunk = {} as chunk;
+		var chunk: Chunk = {} as Chunk;
 		chunk.bytes = ((packet[0] & 0x3f) << 4) | (packet[1] & ((1 << 4) - 1));
 		chunk.flags = (packet[0] >> 6) & 3;
 		
@@ -482,7 +445,7 @@ export class Client extends EventEmitter {
 			let inputInterval = setInterval(() => {
 				if (this.State == States.STATE_OFFLINE) {
 					clearInterval(inputInterval)
-					console.log("???");
+					// console.log("???");
 				}
 				if (this.State != States.STATE_ONLINE)
 					return;
@@ -562,7 +525,7 @@ export class Client extends EventEmitter {
 					this.lastRecvTime = new Date().getTime();
 				}
 				
-				var unpacked: _packet = this.Unpack(packet);
+				var unpacked: _Packet = this.Unpack(packet);
 				// unpacked.chunks = unpacked.chunks.filter(chunk => ((chunk.flags & 2) && (chunk.flags & 1)) ? chunk.seq! > this.ack : true); // filter out already received chunks
 				this.sentChunkQueue.forEach((buff, i) => {
 					let chunkFlags = (buff[0] >> 6) & 3;
@@ -605,11 +568,7 @@ export class Client extends EventEmitter {
 							this.SendMsgEx(packer); // send ping reply
 						} else if (chunk.msgid == NETMSG.System.NETMSG_PING_REPLY) { // Ping reply
 							this.game._ping_resolve(new Date().getTime())
-						} else if (chunk.msgid == NETMSG.System.NETMSG_RCON_LINE) {
-							const unpacker = new MsgUnpacker(chunk.raw);
-							const msg = unpacker.unpackString();
-							this.rcon.emit('rcon_line', msg);
-						}
+						} else if (this.rcon._checkChunks(chunk)) {}
 						// packets neccessary for connection
 						// https://ddnet.org/docs/libtw2/connection/
 

@@ -213,3 +213,24 @@ export namespace SnapshotItemTypes {
         m_Type: number,
     }
 }
+export type RconCommand = {
+	command: string;
+	description: string;
+	params: string;
+}
+export interface Chunk {
+	bytes: number,
+	flags: number,
+	seq?: number,
+	// type: 'sys' | 'game',
+	sys: Boolean,
+	msgid: number,
+	msg: string,
+	raw: Buffer,
+	extended_msgid?: Buffer;
+}
+
+export interface _Packet {
+	twprotocol: { flags: number, ack: number, chunkAmount: number, size: number },
+	chunks: Chunk[]
+}
