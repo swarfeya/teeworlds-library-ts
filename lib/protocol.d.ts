@@ -1,4 +1,4 @@
-enum States {
+export enum States {
 	STATE_OFFLINE = 0,
 	STATE_CONNECTING,
 	STATE_LOADING,
@@ -8,7 +8,7 @@ enum States {
 	STATE_RESTARTING
 }
 
-namespace NETMSG {
+export namespace NETMSG {
 
 	enum NETMSG_Game {
 		EX,

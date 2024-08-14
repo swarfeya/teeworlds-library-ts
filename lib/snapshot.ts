@@ -1,7 +1,7 @@
 import { UUIDManager, createTwMD5Hash } from "./UUIDManager";
 import { Client } from "./client";
 import { MsgUnpacker } from "./MsgUnpacker";
-import { SnapshotItemTypes } from "./snapshots";
+import { SnapshotItemTypes, DeltaItem, DDNetItem, Item } from "./snapshots";
 var decoder = new TextDecoder('utf-8');
 
 const ___itemAppendix: {"type_id": number, "size": number, "name": string}[] = [ // only used for the events underneath. the actual itemAppendix below this is only used for size
@@ -75,8 +75,6 @@ export enum items {
 	EVENT_DAMAGE_INDICATOR
 }
 
-export declare type Item = SnapshotItemTypes.PlayerInput | SnapshotItemTypes.PlayerInfo | SnapshotItemTypes.Projectile | SnapshotItemTypes.Laser | SnapshotItemTypes.Pickup | SnapshotItemTypes.Flag | SnapshotItemTypes.GameInfo | SnapshotItemTypes.GameData | SnapshotItemTypes.CharacterCore | SnapshotItemTypes.Character | SnapshotItemTypes.PlayerInfo | SnapshotItemTypes.ClientInfo | SnapshotItemTypes.SpectatorInfo | SnapshotItemTypes.Common | SnapshotItemTypes.Explosion | SnapshotItemTypes.Spawn | SnapshotItemTypes.HammerHit | SnapshotItemTypes.Death | SnapshotItemTypes.SoundGlobal | SnapshotItemTypes.SoundWorld | SnapshotItemTypes.DamageInd;
-export declare type DDNetItem = SnapshotItemTypes.MyOwnObject | SnapshotItemTypes.DDNetCharacter | SnapshotItemTypes.DDNetPlayer | SnapshotItemTypes.GameInfoEx | SnapshotItemTypes.DDNetProjectile | SnapshotItemTypes.DDNetLaser;
 interface eSnap {
 	Snapshot: {Key: number, Data: number[]},
 	ack: number,
@@ -93,7 +91,7 @@ let supported_uuids = [
 ]
 
 export class Snapshot {
-	deltas: {'data': number[], 'parsed': Item | DDNetItem, 'type_id': number, 'id': number, 'key': number}[] = [];
+	deltas: DeltaItem[] = [];
 	eSnapHolder: eSnap[] = [];
 	crc_errors: number = 0;
 	client: Client;

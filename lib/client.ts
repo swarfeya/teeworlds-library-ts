@@ -9,16 +9,16 @@ import { unpackString, MsgUnpacker } from "./MsgUnpacker";
 let { version } = require('../package.json');
 
 import Movement from './components/movement';
-import { SnapshotItemTypes } from './snapshots';
+import { DeltaItem, SnapshotItemTypes } from './snapshots';
 
 import { MsgPacker } from './MsgPacker';
-import { Item, Snapshot } from './snapshot';
+import { Snapshot } from './snapshot';
 import { Huffman } from "./huffman";
 import { Game } from "./components/game";
 import { SnapshotWrapper } from "./components/snapshot";
 
 import { UUIDManager } from "./UUIDManager";
-import { items } from "teeworlds";
+import { NETMSG, States } from "./protocol";
 
 const huff = new Huffman();
 
@@ -76,27 +76,29 @@ declare interface iOptions {
 	lightweight?: boolean // experimental, only sends keepalive's (sendinput has to be called manually)
 }
 
-export declare interface Client {
-	
-
-	on(event: 'connected', listener: () => void): this;
-	on(event: 'disconnect', listener: (reason: string) => void): this;
-
-	on(event: 'emote', listener: (message: iEmoticon) => void): this;
-	on(event: 'message', listener: (message: iMessage) => void): this;
-	on(event: 'broadcast', listener: (message: string) => void): this;
-	on(event: 'kill', listener: (kill: iKillMsg) => void): this;
-	on(event: 'motd', listener: (message: string) => void): this;
-	
-	on(event: 'map_details', listener: (message: {map_name: string, map_sha256: Buffer, map_crc: number, map_size: number, map_url: string}) => void): this;
-	on(event: 'capabilities', listener: (message: {ChatTimeoutCode: boolean, AnyPlayerFlag: boolean, PingEx: boolean, AllowDummy: boolean, SyncWeaponInput: boolean}) => void): this;
-	
-	on(event: 'snapshot', listener: (items: Item[]) => void): this;
-	on(event: 'rcon_line', listener: (line: string) => void): this;
+interface ClientEvents {
+    connected: () => void;
+    disconnect: (reason: string) => void;
+    emote: (message: iEmoticon) => void;
+    message: (message: iMessage) => void;
+    broadcast: (message: string) => void;
+    kill: (kill: iKillMsg) => void;
+    motd: (message: string) => void;
+    map_details: (message: { map_name: string, map_sha256: Buffer, map_crc: number, map_size: number, map_url: string }) => void;
+    capabilities: (message: { ChatTimeoutCode: boolean, AnyPlayerFlag: boolean, PingEx: boolean, AllowDummy: boolean, SyncWeaponInput: boolean }) => void;
+    snapshot: (items: DeltaItem[]) => void;
+    rcon_line: (line: string) => void;
 }
 
 export class Client extends EventEmitter {
-
+	on<K extends keyof ClientEvents>(event: K, listener: ClientEvents[K]): this {
+		return super.on(event, listener);
+	}
+	
+	emit<K extends keyof ClientEvents>(event: K, ...args: Parameters<ClientEvents[K]>): boolean {
+		return super.emit(event, ...args);
+	}
+	
 	private host: string;
 	private port: number;
 	private name: string;
@@ -475,7 +477,6 @@ export class Client extends EventEmitter {
 			let timeoutTime = this.options?.timeout ? this.options.timeout : 15000;
 			if ((new Date().getTime() - this.lastRecvTime) > timeoutTime) {
 				this.State = States.STATE_OFFLINE;
-				this.emit("timeout");
 				this.emit("disconnect", "Timed Out. (no packets received for " + (new Date().getTime() - this.lastRecvTime) + "ms)");
 				clearInterval(Timeout);
 			}
@@ -577,7 +578,7 @@ export class Client extends EventEmitter {
 							this.SendMsgEx(packer); // send ping reply
 						} else if (chunk.msgid == NETMSG.System.NETMSG_PING_REPLY) { // Ping reply
 							this.game._ping_resolve(new Date().getTime())
-						} else if (chunk.msgid == NETMSG_Sys.NETMSG_RCON_LINE) {
+						} else if (chunk.msgid == NETMSG.System.NETMSG_RCON_LINE) {
 							const unpacker = new MsgUnpacker(chunk.raw);
 							const msg = unpacker.unpackString();
 							this.emit('rcon_line', msg);
@@ -880,7 +881,7 @@ export class Client extends EventEmitter {
 	}
 	/** Rcon auth, set the `username` to empty string for authentication w/o username **/
 	rconAuth(username: string, password: string) {
-		const rconAuthMsg = new MsgPacker(NETMSG_Sys.NETMSG_RCON_AUTH, true, 1);
+		const rconAuthMsg = new MsgPacker(NETMSG.System.NETMSG_RCON_AUTH, true, 1);
 		rconAuthMsg.AddString(username);
 		rconAuthMsg.AddString(password);
 		rconAuthMsg.AddInt(1);
@@ -894,7 +895,7 @@ export class Client extends EventEmitter {
 		else _cmds = [cmds];
 		const msgs: MsgPacker[] = [];
 		_cmds.forEach((cmd) => {
-			const rconCmdMsg = new MsgPacker(NETMSG_Sys.NETMSG_RCON_CMD, true, 1);
+			const rconCmdMsg = new MsgPacker(NETMSG.System.NETMSG_RCON_CMD, true, 1);
 			rconCmdMsg.AddString(cmd);
 			msgs.push(rconCmdMsg);
 		})
