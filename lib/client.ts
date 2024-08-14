@@ -9,7 +9,7 @@ import { unpackString, MsgUnpacker } from "./MsgUnpacker";
 let { version } = require('../package.json');
 
 import Movement from './components/movement';
-import { PlayerInput, PlayerInfo, Projectile, Laser, Pickup, Flag, GameInfo, GameData, CharacterCore, Character, ClientInfo, SpectatorInfo, Common, Explosion, Spawn, HammerHit, Death, SoundGlobal, SoundWorld, DamageInd } from "./snapshots";
+import { SnapshotItemTypes } from './snapshots';
 
 import { MsgPacker } from './MsgPacker';
 import { Item, Snapshot } from './snapshot';
@@ -18,119 +18,9 @@ import { Game } from "./components/game";
 import { SnapshotWrapper } from "./components/snapshot";
 
 import { UUIDManager } from "./UUIDManager";
+import { items } from "teeworlds";
 
 const huff = new Huffman();
-
-enum States {
-	STATE_OFFLINE = 0,
-	STATE_CONNECTING,
-	STATE_LOADING,
-	STATE_ONLINE,
-	STATE_DEMOPLAYBACK,
-	STATE_QUITTING,
-	STATE_RESTARTING
-}
-
-
-enum NETMSG_Game {
-	EX,
-	SV_MOTD,
-	SV_BROADCAST,
-	SV_CHAT,
-	SV_KILLMSG,
-	SV_SOUNDGLOBAL,
-	SV_TUNEPARAMS,
-	SV_EXTRAPROJECTILE,
-	SV_READYTOENTER,
-	SV_WEAPONPICKUP,
-	SV_EMOTICON,
-	SV_VOTECLEAROPTIONS,
-	SV_VOTEOPTIONLISTADD,
-	SV_VOTEOPTIONADD,
-	SV_VOTEOPTIONREMOVE,
-	SV_VOTESET,
-	SV_VOTESTATUS,
-	CL_SAY,
-	CL_SETTEAM,
-	CL_SETSPECTATORMODE,
-	CL_STARTINFO,
-	CL_CHANGEINFO,
-	CL_KILL,
-	CL_EMOTICON,
-	CL_VOTE,
-	CL_CALLVOTE,
-	CL_ISDDNETLEGACY,
-	SV_DDRACETIMELEGACY,
-	SV_RECORDLEGACY,
-	UNUSED,
-	SV_TEAMSSTATELEGACY,
-	CL_SHOWOTHERSLEGACY,
-	NUM
-}
-
-enum NETMSG_Sys {
-	NETMSG_EX = 0,
-
-	// the first thing sent by the client
-	// contains the version info for the client
-	NETMSG_INFO = 1,
-
-	// sent by server
-	NETMSG_MAP_CHANGE, // sent when client should switch map
-	NETMSG_MAP_DATA, // map transfer, contains a chunk of the map file
-	NETMSG_CON_READY, // connection is ready, client should send start info
-	NETMSG_SNAP, // normal snapshot, multiple parts
-	NETMSG_SNAPEMPTY, // empty snapshot
-	NETMSG_SNAPSINGLE, // ?
-	NETMSG_SNAPSMALL, //
-	NETMSG_INPUTTIMING, // reports how off the input was
-	NETMSG_RCON_AUTH_STATUS, // result of the authentication
-	NETMSG_RCON_LINE, // line that should be printed to the remote console
-
-	NETMSG_AUTH_CHALLANGE, //
-	NETMSG_AUTH_RESULT, //
-
-	// sent by client
-	NETMSG_READY, //
-	NETMSG_ENTERGAME,
-	NETMSG_INPUT, // contains the inputdata from the client
-	NETMSG_RCON_CMD, //
-	NETMSG_RCON_AUTH, //
-	NETMSG_REQUEST_MAP_DATA, //
-
-	NETMSG_AUTH_START, //
-	NETMSG_AUTH_RESPONSE, //
-
-	// sent by both
-	NETMSG_PING,
-	NETMSG_PING_REPLY,
-	NETMSG_ERROR,
-
-	// sent by server (todo: move it up)
-	NETMSG_RCON_CMD_ADD,
-	NETMSG_RCON_CMD_REM,
-
-	NUM_NETMSGS,
-
-	NETMSG_WHATIS = 65536,
-	NETMSG_ITIS,
-	NETMSG_IDONTKNOW,
-
-	NETMSG_RCONTYPE,
-	NETMSG_MAP_DETAILS,
-	NETMSG_CAPABILITIES,
-	NETMSG_CLIENTVER,
-	NETMSG_PINGEX,
-	NETMSG_PONGEX,
-	NETMSG_CHECKSUM_REQUEST,
-	NETMSG_CHECKSUM_RESPONSE,
-	NETMSG_CHECKSUM_ERROR,
-
-	NETMSG_REDIRECT,
-
-	NETMSG_I_AM_NPM_PACKAGE
-
-}
 
 interface chunk {
 	bytes: number,
@@ -158,27 +48,27 @@ var messageTypes = [
 declare interface iMessage {
 	team: number,
 	client_id: number,
-	author?: { ClientInfo?: ClientInfo, PlayerInfo?: PlayerInfo },
+	author?: { ClientInfo?: SnapshotItemTypes.ClientInfo, PlayerInfo?: SnapshotItemTypes.PlayerInfo },
 	message: string
 }
 
 declare interface iEmoticon {
 	client_id: number,
 	emoticon: number,
-	author?: { ClientInfo?: ClientInfo, PlayerInfo?: PlayerInfo }
+	author?: { ClientInfo?: SnapshotItemTypes.ClientInfo, PlayerInfo?: SnapshotItemTypes.PlayerInfo }
 }
 
 declare interface iKillMsg {
 	killer_id: number,
-	killer?: { ClientInfo?: ClientInfo, PlayerInfo?: PlayerInfo },
+	killer?: { ClientInfo?: SnapshotItemTypes.ClientInfo, PlayerInfo?: SnapshotItemTypes.PlayerInfo },
 	victim_id: number,
-	victim?: { ClientInfo?: ClientInfo, PlayerInfo?: PlayerInfo },
+	victim?: { ClientInfo?: SnapshotItemTypes.ClientInfo, PlayerInfo?: SnapshotItemTypes.PlayerInfo },
 	weapon: number,
 	special_mode: number
 }
 
 declare interface iOptions {
-	identity?: ClientInfo,
+	identity?: SnapshotItemTypes.ClientInfo,
 	password?: string,
 	ddnet_version?: {version: number, release_version: string},
 	timeout?: number, // in ms
@@ -298,22 +188,22 @@ export class Client extends EventEmitter {
 
 		this.UUIDManager = new UUIDManager();
 		
-		this.UUIDManager.RegisterName("what-is@ddnet.tw", NETMSG_Sys.NETMSG_WHATIS);
-		this.UUIDManager.RegisterName("it-is@ddnet.tw", NETMSG_Sys.NETMSG_ITIS);
-		this.UUIDManager.RegisterName("i-dont-know@ddnet.tw", NETMSG_Sys.NETMSG_IDONTKNOW);
+		this.UUIDManager.RegisterName("what-is@ddnet.tw", NETMSG.System.NETMSG_WHATIS);
+		this.UUIDManager.RegisterName("it-is@ddnet.tw", NETMSG.System.NETMSG_ITIS);
+		this.UUIDManager.RegisterName("i-dont-know@ddnet.tw", NETMSG.System.NETMSG_IDONTKNOW);
 
-		this.UUIDManager.RegisterName("rcon-type@ddnet.tw", NETMSG_Sys.NETMSG_RCONTYPE);
-		this.UUIDManager.RegisterName("map-details@ddnet.tw", NETMSG_Sys.NETMSG_MAP_DETAILS);
-		this.UUIDManager.RegisterName("capabilities@ddnet.tw", NETMSG_Sys.NETMSG_CAPABILITIES);
-		this.UUIDManager.RegisterName("clientver@ddnet.tw", NETMSG_Sys.NETMSG_CLIENTVER);
-		this.UUIDManager.RegisterName("ping@ddnet.tw", NETMSG_Sys.NETMSG_PING);
-		this.UUIDManager.RegisterName("pong@ddnet.tw", NETMSG_Sys.NETMSG_PONGEX);
-		this.UUIDManager.RegisterName("checksum-request@ddnet.tw", NETMSG_Sys.NETMSG_CHECKSUM_REQUEST);
-		this.UUIDManager.RegisterName("checksum-response@ddnet.tw", NETMSG_Sys.NETMSG_CHECKSUM_RESPONSE);
-		this.UUIDManager.RegisterName("checksum-error@ddnet.tw", NETMSG_Sys.NETMSG_CHECKSUM_ERROR);
-		this.UUIDManager.RegisterName("redirect@ddnet.org", NETMSG_Sys.NETMSG_REDIRECT);
+		this.UUIDManager.RegisterName("rcon-type@ddnet.tw", NETMSG.System.NETMSG_RCONTYPE);
+		this.UUIDManager.RegisterName("map-details@ddnet.tw", NETMSG.System.NETMSG_MAP_DETAILS);
+		this.UUIDManager.RegisterName("capabilities@ddnet.tw", NETMSG.System.NETMSG_CAPABILITIES);
+		this.UUIDManager.RegisterName("clientver@ddnet.tw", NETMSG.System.NETMSG_CLIENTVER);
+		this.UUIDManager.RegisterName("ping@ddnet.tw", NETMSG.System.NETMSG_PING);
+		this.UUIDManager.RegisterName("pong@ddnet.tw", NETMSG.System.NETMSG_PONGEX);
+		this.UUIDManager.RegisterName("checksum-request@ddnet.tw", NETMSG.System.NETMSG_CHECKSUM_REQUEST);
+		this.UUIDManager.RegisterName("checksum-response@ddnet.tw", NETMSG.System.NETMSG_CHECKSUM_RESPONSE);
+		this.UUIDManager.RegisterName("checksum-error@ddnet.tw", NETMSG.System.NETMSG_CHECKSUM_ERROR);
+		this.UUIDManager.RegisterName("redirect@ddnet.org", NETMSG.System.NETMSG_REDIRECT);
 
-		this.UUIDManager.RegisterName("i-am-npm-package@swarfey.gitlab.io", NETMSG_Sys.NETMSG_I_AM_NPM_PACKAGE);
+		this.UUIDManager.RegisterName("i-am-npm-package@swarfey.gitlab.io", NETMSG.System.NETMSG_I_AM_NPM_PACKAGE);
 
 	}
 
@@ -624,7 +514,7 @@ export class Client extends EventEmitter {
 						}
 		
 						var i_am_npm_package = new MsgPacker(0, true, 1);
-						i_am_npm_package.AddBuffer(this.UUIDManager.LookupType(NETMSG_Sys.NETMSG_I_AM_NPM_PACKAGE)!.hash);
+						i_am_npm_package.AddBuffer(this.UUIDManager.LookupType(NETMSG.System.NETMSG_I_AM_NPM_PACKAGE)!.hash);
 									
 						i_am_npm_package.AddString(`https://www.npmjs.com/package/teeworlds/v/${version}`);
 
@@ -680,23 +570,23 @@ export class Client extends EventEmitter {
 
 					if (chunk.sys) { 
 						// system messages
-						if (chunk.msgid == NETMSG_Sys.NETMSG_PING) { // ping
-							let packer = new MsgPacker(NETMSG_Sys.NETMSG_PING_REPLY, true, 0);
+						if (chunk.msgid == NETMSG.System.NETMSG_PING) { // ping
+							let packer = new MsgPacker(NETMSG.System.NETMSG_PING_REPLY, true, 0);
 
 							this.SendMsgEx(packer); // send ping reply
-						} else if (chunk.msgid == NETMSG_Sys.NETMSG_PING_REPLY) { // Ping reply
+						} else if (chunk.msgid == NETMSG.System.NETMSG_PING_REPLY) { // Ping reply
 							this.game._ping_resolve(new Date().getTime())
 						} 
 
 						// packets neccessary for connection
 						// https://ddnet.org/docs/libtw2/connection/
 
-						if (chunk.msgid == NETMSG_Sys.NETMSG_MAP_CHANGE) {
+						if (chunk.msgid == NETMSG.System.NETMSG_MAP_CHANGE) {
 							this.Flush();
-							var Msg = new MsgPacker(NETMSG_Sys.NETMSG_READY, true, 1); /* ready */
+							var Msg = new MsgPacker(NETMSG.System.NETMSG_READY, true, 1); /* ready */
 							this.SendMsgEx(Msg);		
-						} else if (chunk.msgid == NETMSG_Sys.NETMSG_CON_READY) {
-							var info = new MsgPacker(NETMSG_Game.CL_STARTINFO, false, 1);
+						} else if (chunk.msgid == NETMSG.System.NETMSG_CON_READY) {
+							var info = new MsgPacker(NETMSG.Game.CL_STARTINFO, false, 1);
 							if (this.options?.identity) {
 								info.AddString(this.options.identity.name); 
 								info.AddString(this.options.identity.clan); 
@@ -720,7 +610,7 @@ export class Client extends EventEmitter {
 							this.SendMsgEx([info, crashmeplx]);
 						} 
 
-						if (chunk.msgid >= NETMSG_Sys.NETMSG_SNAP && chunk.msgid <= NETMSG_Sys.NETMSG_SNAPSINGLE) {
+						if (chunk.msgid >= NETMSG.System.NETMSG_SNAP && chunk.msgid <= NETMSG.System.NETMSG_SNAPSINGLE) {
 							this.receivedSnaps++; /* wait for 2 ss before seeing self as connected */
 							if (this.receivedSnaps == 2) {
 								if (this.State != States.STATE_ONLINE)
@@ -741,12 +631,12 @@ export class Client extends EventEmitter {
 						let Crc = 0;
 						let CompleteSize = 0;
 
-						if (chunk.msgid == NETMSG_Sys.NETMSG_SNAP) {
+						if (chunk.msgid == NETMSG.System.NETMSG_SNAP) {
 							NumParts = unpacker.unpackInt();
 							Part = unpacker.unpackInt();
 						}	
 
-						if (chunk.msgid != NETMSG_Sys.NETMSG_SNAPEMPTY) {
+						if (chunk.msgid != NETMSG.System.NETMSG_SNAPEMPTY) {
 							Crc = unpacker.unpackInt();
 							PartSize = unpacker.unpackInt();
 						}
@@ -789,28 +679,28 @@ export class Client extends EventEmitter {
 
 						}
 						
-						if (chunk.msgid >= NETMSG_Sys.NETMSG_WHATIS && chunk.msgid <= NETMSG_Sys.NETMSG_CHECKSUM_ERROR) {
-							if (chunk.msgid == NETMSG_Sys.NETMSG_WHATIS) {
+						if (chunk.msgid >= NETMSG.System.NETMSG_WHATIS && chunk.msgid <= NETMSG.System.NETMSG_CHECKSUM_ERROR) {
+							if (chunk.msgid == NETMSG.System.NETMSG_WHATIS) {
 								let Uuid = chunk.raw.slice(0, 16);
 
 								let uuid = this.UUIDManager.LookupUUID(Uuid);
 								let packer = new MsgPacker(0, true, 1);
 								if (uuid !== undefined) {
 									// IT_IS msg
-									packer.AddBuffer(this.UUIDManager.LookupType(NETMSG_Sys.NETMSG_ITIS)!.hash);
+									packer.AddBuffer(this.UUIDManager.LookupType(NETMSG.System.NETMSG_ITIS)!.hash);
 									
 									packer.AddBuffer(Uuid);
 									packer.AddString(uuid.name);
 								} else {
 									// dont_know msg
-									packer.AddBuffer(this.UUIDManager.LookupType(NETMSG_Sys.NETMSG_IDONTKNOW)!.hash);
+									packer.AddBuffer(this.UUIDManager.LookupType(NETMSG.System.NETMSG_IDONTKNOW)!.hash);
 									
 									packer.AddBuffer(Uuid);
 								}
 								this.QueueChunkEx(packer)
 							}
 
-							if (chunk.msgid == NETMSG_Sys.NETMSG_MAP_DETAILS) { // TODO: option for downloading maps
+							if (chunk.msgid == NETMSG.System.NETMSG_MAP_DETAILS) { // TODO: option for downloading maps
 								let unpacker = new MsgUnpacker(chunk.raw);
 
 								let map_name = unpacker.unpackString();
@@ -827,7 +717,7 @@ export class Client extends EventEmitter {
 								this.emit("map_details", {map_name, map_sha256, map_crc, map_size, map_url})
 								// unpacker.unpack
 
-							} else if (chunk.msgid == NETMSG_Sys.NETMSG_CAPABILITIES) {
+							} else if (chunk.msgid == NETMSG.System.NETMSG_CAPABILITIES) {
 								let unpacker = new MsgUnpacker(chunk.raw);
 								let Version = unpacker.unpackInt();
 								let Flags = unpacker.unpackInt();
@@ -865,9 +755,9 @@ export class Client extends EventEmitter {
 								}
 								this.emit("capabilities", {ChatTimeoutCode, AnyPlayerFlag, PingEx, AllowDummy, SyncWeaponInput});
 								// https://github.com/ddnet/ddnet/blob/06e3eb564150e9ab81b3a5595c48e9fe5952ed32/src/engine/client/client.cpp#L1565
-							} else if (chunk.msgid == NETMSG_Sys.NETMSG_PINGEX) {
+							} else if (chunk.msgid == NETMSG.System.NETMSG_PINGEX) {
 								let packer = new MsgPacker(0, true, 2);
-								packer.AddBuffer(this.UUIDManager.LookupType(NETMSG_Sys.NETMSG_PONGEX)!.hash);
+								packer.AddBuffer(this.UUIDManager.LookupType(NETMSG.System.NETMSG_PONGEX)!.hash);
 
 								this.SendMsgEx(packer, 2);
 							}
@@ -878,9 +768,9 @@ export class Client extends EventEmitter {
 						// game messages
 
 						// vote list:
-						if (chunk.msgid == NETMSG_Game.SV_VOTECLEAROPTIONS) {
+						if (chunk.msgid == NETMSG.Game.SV_VOTECLEAROPTIONS) {
 							this.VoteList = [];
-						} else if (chunk.msgid == NETMSG_Game.SV_VOTEOPTIONLISTADD) {
+						} else if (chunk.msgid == NETMSG.Game.SV_VOTEOPTIONLISTADD) {
 							let unpacker = new MsgUnpacker(chunk.raw)
 							let NumOptions = unpacker.unpackInt()
 							let list: string[] = [];
@@ -890,11 +780,11 @@ export class Client extends EventEmitter {
 							list = list.slice(0, NumOptions);
 
 							this.VoteList.push(...list);
-						} else if (chunk.msgid == NETMSG_Game.SV_VOTEOPTIONADD) {
+						} else if (chunk.msgid == NETMSG.Game.SV_VOTEOPTIONADD) {
 							let unpacker = new MsgUnpacker(chunk.raw)
 							
 							this.VoteList.push(unpacker.unpackString());
-						} else if (chunk.msgid == NETMSG_Game.SV_VOTEOPTIONREMOVE) {
+						} else if (chunk.msgid == NETMSG.Game.SV_VOTEOPTIONREMOVE) {
 							let unpacker = new MsgUnpacker(chunk.raw)
 							
 							let index = this.VoteList.indexOf(unpacker.unpackString());
@@ -905,7 +795,7 @@ export class Client extends EventEmitter {
 						}
 
 						// events
-						if (chunk.msgid == NETMSG_Game.SV_EMOTICON) {
+						if (chunk.msgid == NETMSG.Game.SV_EMOTICON) {
 							let unpacker = new MsgUnpacker(chunk.raw);
 							let unpacked = {
 								client_id: unpacker.unpackInt(),
@@ -922,11 +812,11 @@ export class Client extends EventEmitter {
 
 							
 
-						} else if (chunk.msgid == NETMSG_Game.SV_BROADCAST) {
+						} else if (chunk.msgid == NETMSG.Game.SV_BROADCAST) {
 							let unpacker = new MsgUnpacker(chunk.raw);
 
 							this.emit("broadcast", unpacker.unpackString());
-						} if (chunk.msgid == NETMSG_Game.SV_CHAT) {
+						} if (chunk.msgid == NETMSG.Game.SV_CHAT) {
 							let unpacker = new MsgUnpacker(chunk.raw);
 							let unpacked: iMessage = {
 								team: unpacker.unpackInt(),
@@ -941,7 +831,7 @@ export class Client extends EventEmitter {
 								}
 							}
 							this.emit("message", unpacked)
-						} else if (chunk.msgid == NETMSG_Game.SV_KILLMSG) {
+						} else if (chunk.msgid == NETMSG.Game.SV_KILLMSG) {
 							let unpacked: iKillMsg = {} as iKillMsg;
 							let unpacker = new MsgUnpacker(chunk.raw);
 							unpacked.killer_id = unpacker.unpackInt();
@@ -955,7 +845,7 @@ export class Client extends EventEmitter {
 							if (unpacked.killer_id != -1 && unpacked.killer_id < 64)
 								unpacked.killer = { ClientInfo: this.SnapshotUnpacker.getObjClientInfo(unpacked.killer_id), PlayerInfo: this.SnapshotUnpacker.getObjPlayerInfo(unpacked.killer_id) }
 							this.emit("kill", unpacked)
-						} else if (chunk.msgid == NETMSG_Game.SV_MOTD) {
+						} else if (chunk.msgid == NETMSG.Game.SV_MOTD) {
 							let unpacker = new MsgUnpacker(chunk.raw);
 							let message = unpacker.unpackString();
 							this.emit("motd", message);
@@ -963,8 +853,8 @@ export class Client extends EventEmitter {
 
 						// packets neccessary for connection
 						// https://ddnet.org/docs/libtw2/connection/
-						if (chunk.msgid == NETMSG_Game.SV_READYTOENTER) {
-							var Msg = new MsgPacker(NETMSG_Sys.NETMSG_ENTERGAME, true, 1); /* entergame */
+						if (chunk.msgid == NETMSG.Game.SV_READYTOENTER) {
+							var Msg = new MsgPacker(NETMSG.System.NETMSG_ENTERGAME, true, 1); /* entergame */
 							this.SendMsgEx(Msg);
 							this.OnEnterGame();
 						}

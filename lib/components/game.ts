@@ -1,9 +1,7 @@
 
 import { MsgPacker } from "../MsgPacker";
-import { PlayerInput, PlayerInfo, Projectile, Laser, Pickup, Flag, GameInfo, GameData, CharacterCore, Character, ClientInfo, SpectatorInfo, Common, Explosion, Spawn, HammerHit, Death, SoundGlobal, SoundWorld, DamageInd } from "../snapshots";
-
+import { SnapshotItemTypes } from "../snapshots";
 import { Client } from "../client";
-enum NETMSGTYPE { EX, SV_MOTD, SV_BROADCAST, SV_CHAT, SV_KILLMSG, SV_SOUNDGLOBAL, SV_TUNEPARAMS, SV_EXTRAPROJECTILE, SV_READYTOENTER, SV_WEAPONPICKUP, SV_EMOTICON, SV_VOTECLEAROPTIONS, SV_VOTEOPTIONLISTADD, SV_VOTEOPTIONADD, SV_VOTEOPTIONREMOVE, SV_VOTESET, SV_VOTESTATUS, CL_SAY, CL_SETTEAM, CL_SETSPECTATORMODE, CL_STARTINFO, CL_CHANGEINFO, CL_KILL, CL_EMOTICON, CL_VOTE, CL_CALLVOTE, CL_ISDDNETLEGACY, SV_DDRACETIMELEGACY, SV_RECORDLEGACY, UNUSED, SV_TEAMSSTATELEGACY, CL_SHOWOTHERSLEGACY, NUM };
 
 export class Game {
 	// SendMsgEx: (Msgs: MsgPacker[] | MsgPacker) => void;
@@ -24,7 +22,7 @@ export class Game {
 	}
 
 	Say(message: string, team = false) {
-		var packer = new MsgPacker(NETMSGTYPE.CL_SAY, false, 1);
+		var packer = new MsgPacker(NETMSG.Game.CL_SAY, false, 1);
 		packer.AddInt(team ? 1 : 0); // team
 		packer.AddString(message);
 		this.send(packer);
@@ -33,7 +31,7 @@ export class Game {
 	
 	/** Set the team of an bot. (-1 spectator team, 0 team red/normal team, 1 team blue) */
 	SetTeam(team: number) { 
-		var packer = new MsgPacker(NETMSGTYPE.CL_SETTEAM, false, 1);
+		var packer = new MsgPacker(NETMSG.Game.CL_SETTEAM, false, 1);
 		packer.AddInt(team);
 		this.send(packer);
 	}
@@ -41,7 +39,7 @@ export class Game {
 	
 	/** Spectate an player, taking their id as parameter. pretty useless */
 	SpectatorMode(SpectatorID: number) { 
-		var packer = new MsgPacker(NETMSGTYPE.CL_SETSPECTATORMODE, false, 1);
+		var packer = new MsgPacker(NETMSG.Game.CL_SETSPECTATORMODE, false, 1);
 		packer.AddInt(SpectatorID);
 		this.send(packer);
 	}
@@ -49,8 +47,8 @@ export class Game {
 	
 	
 	/** Change the player info */
-	ChangePlayerInfo(playerInfo: ClientInfo) { 
-		var packer = new MsgPacker(NETMSGTYPE.CL_CHANGEINFO, false, 1);
+	ChangePlayerInfo(playerInfo: SnapshotItemTypes.ClientInfo) { 
+		var packer = new MsgPacker(NETMSG.Game.CL_CHANGEINFO, false, 1);
 		packer.AddString(playerInfo.name); 
 		packer.AddString(playerInfo.clan); 
 		packer.AddInt(playerInfo.country);
@@ -64,14 +62,14 @@ export class Game {
 	
 	/** Kill */
 	Kill() { 
-		var packer = new MsgPacker(NETMSGTYPE.CL_KILL, false, 1);
+		var packer = new MsgPacker(NETMSG.Game.CL_KILL, false, 1);
 		this.send(packer);
 	}
 
 	
 	/** Send emote */
 	Emote(emote: number) { 
-		var packer = new MsgPacker(NETMSGTYPE.CL_EMOTICON, false, 1);
+		var packer = new MsgPacker(NETMSG.Game.CL_EMOTICON, false, 1);
 		packer.AddInt(emote);
 		this.send(packer);
 	}
@@ -79,13 +77,13 @@ export class Game {
 	
 	/** Vote for an already running vote (true = f3 /  false = f4) */
 	Vote(vote: boolean) { 
-		var packer = new MsgPacker(NETMSGTYPE.CL_VOTE, false, 1);
+		var packer = new MsgPacker(NETMSG.Game.CL_VOTE, false, 1);
 		packer.AddInt(vote ? 1 : -1);
 		this.send(packer);
 	}
 
 	private CallVote(Type: "option" | "kick" | "spectate", Value: string|number, Reason: string) { 
-		var packer = new MsgPacker(NETMSGTYPE.CL_CALLVOTE, false, 1);
+		var packer = new MsgPacker(NETMSG.Game.CL_CALLVOTE, false, 1);
 		packer.AddString(Type); 
 		packer.AddString(String(Value));
 		packer.AddString(Reason);
@@ -111,7 +109,7 @@ export class Game {
 	
 	/** probably some verification of using ddnet client. */
 	IsDDNetLegacy() { 
-		var packer = new MsgPacker(NETMSGTYPE.CL_ISDDNETLEGACY, false, 1);
+		var packer = new MsgPacker(NETMSG.Game.CL_ISDDNETLEGACY, false, 1);
 		this.send(packer);
 	}
 	

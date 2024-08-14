@@ -1,7 +1,7 @@
 import { UUIDManager, createTwMD5Hash } from "./UUIDManager";
 import { Client } from "./client";
 import { MsgUnpacker } from "./MsgUnpacker";
-import { PlayerInput, PlayerInfo, Projectile, Laser, Pickup, Flag, GameInfo, GameData, CharacterCore, Character, ClientInfo, SpectatorInfo, Common, Explosion, Spawn, HammerHit, Death, SoundGlobal, SoundWorld, DamageInd, MyOwnObject, DDNetCharacter, DDNetPlayer, GameInfoEx, DDNetProjectile, DDNetLaser } from "./snapshots";
+import { SnapshotItemTypes } from "./snapshots";
 var decoder = new TextDecoder('utf-8');
 
 const ___itemAppendix: {"type_id": number, "size": number, "name": string}[] = [ // only used for the events underneath. the actual itemAppendix below this is only used for size
@@ -75,8 +75,8 @@ export enum items {
 	EVENT_DAMAGE_INDICATOR
 }
 
-export declare type Item = PlayerInput | PlayerInfo | Projectile | Laser | Pickup | Flag | GameInfo | GameData | CharacterCore | Character | PlayerInfo | ClientInfo | SpectatorInfo | Common | Explosion | Spawn |HammerHit | Death | SoundGlobal | SoundWorld | DamageInd;
-export declare type DDNetItem = MyOwnObject | DDNetCharacter | DDNetPlayer | GameInfoEx | DDNetProjectile | DDNetLaser;
+export declare type Item = SnapshotItemTypes.PlayerInput | SnapshotItemTypes.PlayerInfo | SnapshotItemTypes.Projectile | SnapshotItemTypes.Laser | SnapshotItemTypes.Pickup | SnapshotItemTypes.Flag | SnapshotItemTypes.GameInfo | SnapshotItemTypes.GameData | SnapshotItemTypes.CharacterCore | SnapshotItemTypes.Character | SnapshotItemTypes.PlayerInfo | SnapshotItemTypes.ClientInfo | SnapshotItemTypes.SpectatorInfo | SnapshotItemTypes.Common | SnapshotItemTypes.Explosion | SnapshotItemTypes.Spawn | SnapshotItemTypes.HammerHit | SnapshotItemTypes.Death | SnapshotItemTypes.SoundGlobal | SnapshotItemTypes.SoundWorld | SnapshotItemTypes.DamageInd;
+export declare type DDNetItem = SnapshotItemTypes.MyOwnObject | SnapshotItemTypes.DDNetCharacter | SnapshotItemTypes.DDNetPlayer | SnapshotItemTypes.GameInfoEx | SnapshotItemTypes.DDNetProjectile | SnapshotItemTypes.DDNetLaser;
 interface eSnap {
 	Snapshot: {Key: number, Data: number[]},
 	ack: number,
@@ -128,7 +128,7 @@ export class Snapshot {
 			if (this.uuid_manager.LookupType(Type)?.name == "my-own-object@heinrich5991.de") {
 				_item = {
 					m_Test: data[0]
-				} as MyOwnObject;
+				} as SnapshotItemTypes.MyOwnObject;
 			} else if (this.uuid_manager.LookupType(Type)?.name == "character@netobj.ddnet.tw") {
 				_item = {
 					m_Flags: data[0],
@@ -147,21 +147,21 @@ export class Snapshot {
 					m_TargetY: data[9] ?? null,
 					id: id
 			
-				} as DDNetCharacter;
+				} as SnapshotItemTypes.DDNetCharacter;
 			} 
 			else if (this.uuid_manager.LookupType(Type)?.name == "player@netobj.ddnet.tw") {
 				_item = {
 					m_Flags: data[0],
 					m_AuthLevel: data[1],
 					id: id
-				} as DDNetPlayer
+				} as SnapshotItemTypes.DDNetPlayer
 			} 
 			else if (this.uuid_manager.LookupType(Type)?.name == "gameinfo@netobj.ddnet.tw") {
 				_item = {
 					m_Flags: data[0],
 					m_Version: data[1],
 					m_Flags2: data[2]
-				} as GameInfoEx
+				} as SnapshotItemTypes.GameInfoEx
 			} 
 			else if (this.uuid_manager.LookupType(Type)?.name == "projectile@netobj.ddnet.tw") {
 				_item = {
@@ -171,7 +171,7 @@ export class Snapshot {
 					m_Data: data[3],
 					m_Type: data[3],
 					m_StartTick: data[3]
-				} as DDNetProjectile
+				} as SnapshotItemTypes.DDNetProjectile
 			} 
 			else if (this.uuid_manager.LookupType(Type)?.name == "laser@netobj.ddnet.tw") {
 				_item = {
@@ -181,7 +181,7 @@ export class Snapshot {
 					m_FromY: data[3],
 					m_Owner: data[3],
 					m_Type: data[3]
-				} as DDNetLaser
+				} as SnapshotItemTypes.DDNetLaser
 			} 
 			return _item;
 		}
@@ -200,7 +200,7 @@ export class Snapshot {
 					wanted_weapon: data[7],
 					next_weapon: data[8],
 					prev_weapon: data[9],
-				} as PlayerInput
+				} as SnapshotItemTypes.PlayerInput
 				break;
 			case items.OBJ_PROJECTILE:
 				_item = {
@@ -210,7 +210,7 @@ export class Snapshot {
 					vel_y: data[3],
 					type_: data[4],
 					start_tick: data[5],
-				} as Projectile 
+				} as SnapshotItemTypes.Projectile 
 				break;
 			case items.OBJ_LASER:
 				_item = {
@@ -219,7 +219,7 @@ export class Snapshot {
 					from_x: data[2],
 					from_y: data[3],
 					start_tick: data[4],
-				} as Laser
+				} as SnapshotItemTypes.Laser
 				break;
 			case items.OBJ_PICKUP:
 				_item = {
@@ -227,14 +227,14 @@ export class Snapshot {
 					y: data[1],
 					type_: data[2],
 					subtype: data[3],
-				} as Pickup
+				} as SnapshotItemTypes.Pickup
 				break;
 			case items.OBJ_FLAG:
 				_item = {
 					x: data[0],
 					y: data[1],
 					team: data[2],
-				} as Flag
+				} as SnapshotItemTypes.Flag
 				break;
 			case items.OBJ_GAME_INFO:
 				_item = {
@@ -247,7 +247,7 @@ export class Snapshot {
 					round_num: data[6],
 					round_current: data[7],
 
-				} as GameInfo
+				} as SnapshotItemTypes.GameInfo
 				break; 
 			case items.OBJ_GAME_DATA:
 				_item = {
@@ -255,7 +255,7 @@ export class Snapshot {
 					teamscore_blue: data[1],
 					flag_carrier_red: data[2],
 					flag_carrier_blue: data[3],
-				} as GameData
+				} as SnapshotItemTypes.GameData
 				break;
 			case items.OBJ_CHARACTER_CORE:
 				_item = {
@@ -274,7 +274,7 @@ export class Snapshot {
 					hook_y: data[12],
 					hook_dx: data[13],
 					hook_dy: data[14],
-				} as CharacterCore
+				} as SnapshotItemTypes.CharacterCore
 				break;
 			case items.OBJ_CHARACTER:
 				_item = {
@@ -294,7 +294,7 @@ export class Snapshot {
 						hook_y: data[12],
 						hook_dx: data[13],
 						hook_dy: data[14],
-					} as CharacterCore,
+					} as SnapshotItemTypes.CharacterCore,
 					player_flags: data[15],
 					health: data[16],
 					armor: data[17],
@@ -304,7 +304,7 @@ export class Snapshot {
 					attack_tick: data[21],
 
 					client_id: id
-				} as Character
+				} as SnapshotItemTypes.Character
 				break;
 			case items.OBJ_PLAYER_INFO:
 				_item = {
@@ -313,7 +313,7 @@ export class Snapshot {
 					team: data[2],
 					score: data[3],
 					latency: data[4],
-				} as PlayerInfo
+				} as SnapshotItemTypes.PlayerInfo
 				break;
 			case items.OBJ_CLIENT_INFO:
 				_item = {
@@ -325,44 +325,44 @@ export class Snapshot {
 					color_body: Number(data.slice(15, 16)),
 					color_feet: Number(data.slice(16, 17)),
 					id: id
-				} as ClientInfo
+				} as SnapshotItemTypes.ClientInfo
 				break;
 			case items.OBJ_SPECTATOR_INFO:
 				_item = {
 					spectator_id: data[0],
 					x: data[1],
 					y: data[2],
-				} as SpectatorInfo
+				} as SnapshotItemTypes.SpectatorInfo
 				break;
 			case items.EVENT_COMMON:
 				_item = {
 					x: data[0],
 					y: data[1],
-				} as Common
+				} as SnapshotItemTypes.Common
 				break;
 			case items.EVENT_EXPLOSION:
 				_item = {
 					common: {
 						x: data[0],
 						y: data[1]
-					} as Common
-				} as Explosion
+					} as SnapshotItemTypes.Common
+				} as SnapshotItemTypes.Explosion
 				break;
 			case items.EVENT_SPAWN:
 				_item = {
 					common: {
 						x: data[0],
 						y: data[1]
-					} as Common
-				} as Spawn
+					} as SnapshotItemTypes.Common
+				} as SnapshotItemTypes.Spawn
 				break;
 			case items.EVENT_HAMMERHIT:
 				_item = {
 					common: {
 						x: data[0],
 						y: data[1]
-					} as Common
-				} as HammerHit
+					} as SnapshotItemTypes.Common
+				} as SnapshotItemTypes.HammerHit
 				break;
 			case items.EVENT_DEATH:
 				_item = {
@@ -370,26 +370,26 @@ export class Snapshot {
 					common: {
 						x: data[1],
 						y: data[2]
-					} as Common
-				} as Death
+					} as SnapshotItemTypes.Common
+				} as SnapshotItemTypes.Death
 				break;
 			case items.EVENT_SOUND_GLOBAL:
 				_item = {
 					common: {
 						x: data[0],
 						y: data[1]
-					} as Common,
+					} as SnapshotItemTypes.Common,
 					sound_id: data[2]
-				} as SoundGlobal
+				} as SnapshotItemTypes.SoundGlobal
 				break;
 			case items.EVENT_SOUND_WORLD:
 				_item = {
 					common: {
 						x: data[0],
 						y: data[1]
-					} as Common,
+					} as SnapshotItemTypes.Common,
 					sound_id: data[2]
-				} as SoundWorld
+				} as SnapshotItemTypes.SoundWorld
 				break;
 			case items.EVENT_DAMAGE_INDICATOR:
 				_item = {
@@ -397,8 +397,8 @@ export class Snapshot {
 					common: {
 						x: data[0],
 						y: data[1]
-					} as Common,
-				} as DamageInd
+					} as SnapshotItemTypes.Common,
+				} as SnapshotItemTypes.DamageInd
 				break;
 
 		}

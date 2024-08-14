@@ -1,51 +1,18 @@
 
 import { Client } from "../client";
 import { EventEmitter } from "stream";
-import { PlayerInput, PlayerInfo, Projectile, Laser, Pickup, Flag, GameInfo, GameData, CharacterCore, Character, ClientInfo, SpectatorInfo, Common, Explosion, Spawn, HammerHit, Death, SoundGlobal, SoundWorld, DamageInd, MyOwnObject, DDNetCharacter, DDNetProjectile, DDNetLaser, GameInfoEx } from "../snapshots";
-
-enum items {
-	OBJ_EX,
-	OBJ_PLAYER_INPUT,
-	OBJ_PROJECTILE,
-	OBJ_LASER,
-	OBJ_PICKUP,
-	OBJ_FLAG,
-	OBJ_GAME_INFO,
-	OBJ_GAME_DATA,
-	OBJ_CHARACTER_CORE,
-	OBJ_CHARACTER,
-	OBJ_PLAYER_INFO,
-	OBJ_CLIENT_INFO,
-	OBJ_SPECTATOR_INFO,
-	EVENT_COMMON,
-	EVENT_EXPLOSION,
-	EVENT_SPAWN,
-	EVENT_HAMMERHIT,
-	EVENT_DEATH,
-	EVENT_SOUND_GLOBAL,
-	EVENT_SOUND_WORLD,
-	EVENT_DAMAGE_INDICATOR
-}
+import { SnapshotItemTypes, SnapshotItemIDs } from "../snapshots";
 export declare interface SnapshotWrapper {
 	
 
-	// on(event: 'connected', listener: () => void): this;
-	// on(event: 'disconnect', listener: (reason: string) => void): this;
-
-	// on(event: 'emote', listener: (message: iEmoticon) => void): this;
-	// on(event: 'message', listener: (message: iMessage) => void): this;
-	// on(event: 'broadcast', listener: (message: string) => void): this;
-	// on(event: 'kill', listener: (kill: iKillMsg) => void): this;
-	// on(event: 'motd', listener: (message: string) => void): this;
-	
-	on(event: 'common', listener: (common: Common) => void): this;
-	on(event: 'explosion', listener: (explosion: Explosion) => void): this;
-	on(event: 'spawn', listener: (spawn: Spawn) => void): this;
-	on(event: 'hammerhit', listener: (hammerhit: HammerHit) => void): this;
-	on(event: 'death', listener: (death: Death) => void): this;
-	on(event: 'sound_global', listener: (sound_global: SoundGlobal) => void): this;
-	on(event: 'sound_world', listener: (sound_world: SoundWorld) => void): this;
-	on(event: 'damage_indicator', listener: (damage_indicator: DamageInd) => void): this;
+	on(event: 'common', listener: (common: SnapshotItemTypes.Common) => void): this;
+	on(event: 'explosion', listener: (explosion: SnapshotItemTypes.Explosion) => void): this;
+	on(event: 'spawn', listener: (spawn: SnapshotItemTypes.Spawn) => void): this;
+	on(event: 'hammerhit', listener: (hammerhit: SnapshotItemTypes.HammerHit) => void): this;
+	on(event: 'death', listener: (death: SnapshotItemTypes.Death) => void): this;
+	on(event: 'sound_global', listener: (sound_global: SnapshotItemTypes.SoundGlobal) => void): this;
+	on(event: 'sound_world', listener: (sound_world: SnapshotItemTypes.SoundWorld) => void): this;
+	on(event: 'damage_indicator', listener: (damage_indicator: SnapshotItemTypes.DamageInd) => void): this;
 
 }
 
@@ -77,132 +44,132 @@ export class SnapshotWrapper extends EventEmitter {
 		// return this._client.rawSnapUnpacker.deltas.filter(delta => delta.type_id == type_id && delta.id == id).map(a => a.parsed);
 	}
 
-	getObjPlayerInput(player_id: number): PlayerInput | undefined {
-		return this.getParsed(items.OBJ_PLAYER_INPUT, player_id);
+	getObjPlayerInput(player_id: number): SnapshotItemTypes.PlayerInput | undefined {
+		return this.getParsed(SnapshotItemIDs.OBJ_PLAYER_INPUT, player_id);
 	}
 
-	get AllObjPlayerInput(): PlayerInput[] {
-		return this.getAll(items.OBJ_PLAYER_INPUT);
+	get AllObjPlayerInput(): SnapshotItemTypes.PlayerInput[] {
+		return this.getAll(SnapshotItemIDs.OBJ_PLAYER_INPUT);
 	}
 
-	getObjProjectile(id: number): Projectile | undefined {
-		return this.getParsed(items.OBJ_PROJECTILE, id);
+	getObjProjectile(id: number): SnapshotItemTypes.Projectile | undefined {
+		return this.getParsed(SnapshotItemIDs.OBJ_PROJECTILE, id);
 	}
-	get AllProjectiles(): Projectile[] {
-		return this.getAll(items.OBJ_PROJECTILE);
+	get AllProjectiles(): SnapshotItemTypes.Projectile[] {
+		return this.getAll(SnapshotItemIDs.OBJ_PROJECTILE);
 	}
 
-	getObjLaser(id: number): Laser | undefined {
-		return this.getParsed(items.OBJ_LASER, id);
+	getObjLaser(id: number): SnapshotItemTypes.Laser | undefined {
+		return this.getParsed(SnapshotItemIDs.OBJ_LASER, id);
 	}
-	get AllObjLaser(): Laser[] {
-		return this.getAll(items.OBJ_LASER);
+	get AllObjLaser(): SnapshotItemTypes.Laser[] {
+		return this.getAll(SnapshotItemIDs.OBJ_LASER);
 	}
 	
-	getObjPickup(id: number): Pickup | undefined {
-		return this.getParsed(items.OBJ_PICKUP, id);
+	getObjPickup(id: number): SnapshotItemTypes.Pickup | undefined {
+		return this.getParsed(SnapshotItemIDs.OBJ_PICKUP, id);
 	}
-	get AllObjPickup(): Pickup[] {
-		return this.getAll(items.OBJ_PICKUP);
-	}
-	
-	getObjFlag(id: number): Flag | undefined {
-		return this.getParsed(items.OBJ_FLAG, id);
-	}
-	get AllObjFlag(): Flag[] {
-		return this.getAll(items.OBJ_FLAG);
+	get AllObjPickup(): SnapshotItemTypes.Pickup[] {
+		return this.getAll(SnapshotItemIDs.OBJ_PICKUP);
 	}
 	
-	getObjGameInfo(id: number): GameInfo | undefined {
-		return this.getParsed(items.OBJ_GAME_INFO, id);
+	getObjFlag(id: number): SnapshotItemTypes.Flag | undefined {
+		return this.getParsed(SnapshotItemIDs.OBJ_FLAG, id);
 	}
-	get AllObjGameInfo(): GameInfo[] {
-		return this.getAll(items.OBJ_GAME_INFO);
+	get AllObjFlag(): SnapshotItemTypes.Flag[] {
+		return this.getAll(SnapshotItemIDs.OBJ_FLAG);
+	}
+	
+	getObjGameInfo(id: number): SnapshotItemTypes.GameInfo | undefined {
+		return this.getParsed(SnapshotItemIDs.OBJ_GAME_INFO, id);
+	}
+	get AllObjGameInfo(): SnapshotItemTypes.GameInfo[] {
+		return this.getAll(SnapshotItemIDs.OBJ_GAME_INFO);
 	}
 
-	getObjGameData(id: number): GameData | undefined {
-		return this.getParsed(items.OBJ_GAME_DATA, id);
+	getObjGameData(id: number): SnapshotItemTypes.GameData | undefined {
+		return this.getParsed(SnapshotItemIDs.OBJ_GAME_DATA, id);
 	}
-	get AllObjGameData(): GameData[] {
-		return this.getAll(items.OBJ_GAME_DATA);
+	get AllObjGameData(): SnapshotItemTypes.GameData[] {
+		return this.getAll(SnapshotItemIDs.OBJ_GAME_DATA);
 	}
 	
 	/** NOTICE: x & y positions always differ from the positions in the ingame debug menu. If you want the debug menu positions, you can calculate them like this: Math.round((myChar.character_core.x / 32) * 100)/100 */
-	getObjCharacterCore(player_id: number): CharacterCore | undefined { 
-		return this.getParsed(items.OBJ_CHARACTER_CORE, player_id);
+	getObjCharacterCore(player_id: number): SnapshotItemTypes.CharacterCore | undefined { 
+		return this.getParsed(SnapshotItemIDs.OBJ_CHARACTER_CORE, player_id);
 	}
 	/** NOTICE: x & y positions always differ from the positions in the ingame debug menu. If you want the debug menu positions, you can calculate them like this: Math.round((myChar.character_core.x / 32) * 100)/100 */
-	get AllObjCharacterCore(): CharacterCore[] { 
-		return this.getAll(items.OBJ_CHARACTER_CORE);
+	get AllObjCharacterCore(): SnapshotItemTypes.CharacterCore[] { 
+		return this.getAll(SnapshotItemIDs.OBJ_CHARACTER_CORE);
 	}
 
 	/** NOTICE: x & y positions always differ from the positions in the ingame debug menu. If you want the debug menu positions, you can calculate them like this: Math.round((myChar.character_core.x / 32) * 100)/100 */
-	getObjCharacter(player_id: number): Character | undefined { 
-		return this.getParsed(items.OBJ_CHARACTER, player_id);
+	getObjCharacter(player_id: number): SnapshotItemTypes.Character | undefined { 
+		return this.getParsed(SnapshotItemIDs.OBJ_CHARACTER, player_id);
 	}
 	/** NOTICE: x & y positions always differ from the positions in the ingame debug menu. If you want the debug menu positions, you can calculate them like this: Math.round((myChar.character_core.x / 32) * 100)/100 */
-	get AllObjCharacter(): Character[] { 
+	get AllObjCharacter(): SnapshotItemTypes.Character[] { 
 		
-		return this.getAll(items.OBJ_CHARACTER);
+		return this.getAll(SnapshotItemIDs.OBJ_CHARACTER);
 	}
 	
-	getObjPlayerInfo(player_id: number): PlayerInfo | undefined {
-		return this.getParsed(items.OBJ_PLAYER_INFO, player_id);
+	getObjPlayerInfo(player_id: number): SnapshotItemTypes.PlayerInfo | undefined {
+		return this.getParsed(SnapshotItemIDs.OBJ_PLAYER_INFO, player_id);
 	}
-	get AllObjPlayerInfo(): PlayerInfo[] {
-		return this.getAll(items.OBJ_PLAYER_INFO);
-	}
-	
-	getObjClientInfo(player_id: number): ClientInfo | undefined {
-		return this.getParsed(items.OBJ_CLIENT_INFO, player_id);
-	}
-	get AllObjClientInfo(): ClientInfo[] {
-		return this.getAll(items.OBJ_CLIENT_INFO);
+	get AllObjPlayerInfo(): SnapshotItemTypes.PlayerInfo[] {
+		return this.getAll(SnapshotItemIDs.OBJ_PLAYER_INFO);
 	}
 	
-	getObjSpectatorInfo(player_id: number): SpectatorInfo | undefined {
-		return this.getParsed(items.OBJ_SPECTATOR_INFO, player_id);
+	getObjClientInfo(player_id: number): SnapshotItemTypes.ClientInfo | undefined {
+		return this.getParsed(SnapshotItemIDs.OBJ_CLIENT_INFO, player_id);
 	}
-	get AllObjSpectatorInfo(): SpectatorInfo[] {
-		return this.getAll(items.OBJ_SPECTATOR_INFO);
+	get AllObjClientInfo(): SnapshotItemTypes.ClientInfo[] {
+		return this.getAll(SnapshotItemIDs.OBJ_CLIENT_INFO);
+	}
+	
+	getObjSpectatorInfo(player_id: number): SnapshotItemTypes.SpectatorInfo | undefined {
+		return this.getParsed(SnapshotItemIDs.OBJ_SPECTATOR_INFO, player_id);
+	}
+	get AllObjSpectatorInfo(): SnapshotItemTypes.SpectatorInfo[] {
+		return this.getAll(SnapshotItemIDs.OBJ_SPECTATOR_INFO);
 	}
 	
 	private getTypeId(name: string) {
 		return this._client.rawSnapUnpacker.uuid_manager.LookupName(name)?.type_id || -1;
 	}
 
-	getObjExMyOwnObject(id: number): MyOwnObject | undefined {
+	getObjExMyOwnObject(id: number): SnapshotItemTypes.MyOwnObject | undefined {
 		return this.getParsed(this.getTypeId("my-own-object@heinrich5991.de"), id);
 	}
-	get AllObjExMyOwnObject(): MyOwnObject[] {
+	get AllObjExMyOwnObject(): SnapshotItemTypes.MyOwnObject[] {
 		return this.getAll(this.getTypeId("my-own-object@heinrich5991.de"));
 	}
 
-	getObjExDDNetCharacter(id: number): DDNetCharacter | undefined {
+	getObjExDDNetCharacter(id: number): SnapshotItemTypes.DDNetCharacter | undefined {
 		return this.getParsed(this.getTypeId("character@netobj.ddnet.tw"), id);
 	}
-	get AllObjExDDNetCharacter(): DDNetCharacter[] {
+	get AllObjExDDNetCharacter(): SnapshotItemTypes.DDNetCharacter[] {
 		return this.getAll(this.getTypeId("character@netobj.ddnet.tw"));
 	}
 	
-	getObjExGameInfo(id: number): GameInfoEx | undefined {
+	getObjExGameInfo(id: number): SnapshotItemTypes.GameInfoEx | undefined {
 		return this.getParsed(this.getTypeId("gameinfo@netobj.ddnet.tw"), id);
 	}
-	get AllObjExGameInfo(): GameInfoEx[] {
+	get AllObjExGameInfo(): SnapshotItemTypes.GameInfoEx[] {
 		return this.getAll(this.getTypeId("gameinfo@netobj.ddnet.tw"));
 	}
 
-	getObjExDDNetProjectile(id: number): DDNetProjectile | undefined {
+	getObjExDDNetProjectile(id: number): SnapshotItemTypes.DDNetProjectile | undefined {
 		return this.getParsed(this.getTypeId("projectile@netobj.ddnet.tw"), id);
 	}
-	get AllObjExDDNetProjectile(): DDNetProjectile[] {
+	get AllObjExDDNetProjectile(): SnapshotItemTypes.DDNetProjectile[] {
 		return this.getAll(this.getTypeId("projectile@netobj.ddnet.tw"));
 	}
 	
-	getObjExLaser(id: number): DDNetLaser | undefined {
+	getObjExLaser(id: number): SnapshotItemTypes.DDNetLaser | undefined {
 		return this.getParsed(this.getTypeId("laser@netobj.ddnet.tw"), id);
 	}
-	get AllObjExLaser(): DDNetLaser[] {
+	get AllObjExLaser(): SnapshotItemTypes.DDNetLaser[] {
 		return this.getAll(this.getTypeId("laser@netobj.ddnet.tw"));
 	}
 	
