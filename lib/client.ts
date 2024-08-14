@@ -1,7 +1,7 @@
 
 
 import { randomBytes } from "crypto";
-
+import { lookup as dnsLookup } from 'dns';
 import net from 'dgram';
 import { EventEmitter } from 'stream';
 
@@ -422,7 +422,17 @@ export class Client extends EventEmitter {
 	}
 	
 	/** Connect the client to the server. */
-	connect() { 
+	async connect() {
+		// test via regex whether or not this.host is a domain or an ip
+		// if not, resolve it
+		if (!this.host.match(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/)) {
+			dnsLookup(this.host, 4, (err, address, family) => {
+				if (err) throw err;
+				this.host = address;
+				console.log(err, address, family)
+			})
+		}
+ 
 		this.State = States.STATE_CONNECTING;
 
 		let predTimer = setInterval(() => {
