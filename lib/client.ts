@@ -92,6 +92,7 @@ export declare interface Client {
 	on(event: 'capabilities', listener: (message: {ChatTimeoutCode: boolean, AnyPlayerFlag: boolean, PingEx: boolean, AllowDummy: boolean, SyncWeaponInput: boolean}) => void): this;
 	
 	on(event: 'snapshot', listener: (items: Item[]) => void): this;
+	on(event: 'rcon_line', listener: (line: string) => void): this;
 }
 
 export class Client extends EventEmitter {
@@ -576,7 +577,11 @@ export class Client extends EventEmitter {
 							this.SendMsgEx(packer); // send ping reply
 						} else if (chunk.msgid == NETMSG.System.NETMSG_PING_REPLY) { // Ping reply
 							this.game._ping_resolve(new Date().getTime())
-						} 
+						} else if (chunk.msgid == NETMSG_Sys.NETMSG_RCON_LINE) {
+							const unpacker = new MsgUnpacker(chunk.raw);
+							const msg = unpacker.unpackString();
+							this.emit('rcon_line', msg);
+						}
 
 						// packets neccessary for connection
 						// https://ddnet.org/docs/libtw2/connection/
@@ -873,8 +878,29 @@ export class Client extends EventEmitter {
 				}
 			})
 	}
+	/** Rcon auth, set the `username` to empty string for authentication w/o username **/
+	rconAuth(username: string, password: string) {
+		const rconAuthMsg = new MsgPacker(NETMSG_Sys.NETMSG_RCON_AUTH, true, 1);
+		rconAuthMsg.AddString(username);
+		rconAuthMsg.AddString(password);
+		rconAuthMsg.AddInt(1);
+		this.SendMsgEx(rconAuthMsg);
+	}
 
-	
+	/** Send rcon command **/
+	rcon(cmds: string[] | string) {
+		let _cmds: string[];
+		if (cmds instanceof Array) _cmds = cmds
+		else _cmds = [cmds];
+		const msgs: MsgPacker[] = [];
+		_cmds.forEach((cmd) => {
+			const rconCmdMsg = new MsgPacker(NETMSG_Sys.NETMSG_RCON_CMD, true, 1);
+			rconCmdMsg.AddString(cmd);
+			msgs.push(rconCmdMsg);
+		})
+		this.SendMsgEx(msgs);
+	}
+
 	/** Sending the input. (automatically done unless options.lightweight is on) */
 	sendInput(input = this.movement.input) { 
 		if (this.State != States.STATE_ONLINE)
