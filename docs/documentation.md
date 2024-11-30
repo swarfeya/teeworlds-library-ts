@@ -365,4 +365,5 @@ You can find some of the examples in the [docs/examples](docs/examples/) folder.
 *Note:* If you have or know any projects running using this library, please contact me so i can add them, or PR them yourself.
 
 * A discord which is bridging all discord messages and ingame messages (currently closed source): https://discord.gg/MSYcjYvU6e
+* DDNet / Teeworlds Chat Client, no game, just chatting by kiocode: https://github.com/k-i-o/CChat.TW
 
