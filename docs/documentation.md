@@ -366,4 +366,6 @@ You can find some of the examples in the [docs/examples](docs/examples/) folder.
 
 * A discord which is bridging all discord messages and ingame messages (currently closed source): https://discord.gg/MSYcjYvU6e
 * DDNet / Teeworlds Chat Client, no game, just chatting by kiocode: https://github.com/k-i-o/CChat.TW
+* https://github.com/vitorblue007/DDnet-chatbot
+* https://github.com/Siraxa/DDNetSpectate/tree/master
 
