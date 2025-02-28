@@ -19,6 +19,7 @@
 		"headless"
 	],
 	"devDependencies": {
+		"@types/node": "^22.13.5",
 		"typescript": "^3.9.5"
 	}
 }
