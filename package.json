@@ -11,7 +11,7 @@
 	},
 	"repository": {
 		"type": "git",
-		"url": "git+gitlab.com/swarfey/teeworlds-client.git"
+		"url": "git+github.com/swarfeya/teeworlds-library-ts.git"
 	},
 	"keywords": [
 		"teeworlds",
