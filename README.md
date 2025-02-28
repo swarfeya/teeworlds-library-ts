@@ -1,12 +1,13 @@
 # Teeworlds Client
 Library to connect a bot to a Teeworlds server.
 
-https://gitlab.com/swarfey/teeworlds-client/-/tree/main/
+# Links
+https://github.com/swarfeya/teeworlds-library-ts/tree/main
 https://www.npmjs.com/package/teeworlds
 
 # Documentation
-You can find an documentation to what most components do in the [docs/documentation.md](https://gitlab.com/swarfey/teeworlds-client/-/blob/main/docs/documentation.md).
-You can also find a few examples inside of the [docs/examples](https://gitlab.com/swarfey/teeworlds-client/-/tree/main/docs/examples) directory.
+You can find an documentation to what most components do in the [docs/documentation.md](https://github.com/swarfeya/teeworlds-library-ts/blob/main/docs/documentation.md).
+You can also find a few examples inside of the [docs/examples](https://github.com/swarfeya/teeworlds-library-ts/tree/main/docs/examples) directory.
 
 # Projects using this library
 Note: If you have or know any projects running using this library, please contact me so i can add them, or PR them yourself.
