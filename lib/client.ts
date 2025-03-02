@@ -191,6 +191,16 @@ export class Client extends EventEmitter {
 		this.UUIDManager.RegisterName("checksum-error@ddnet.tw", NETMSG.System.NETMSG_CHECKSUM_ERROR);
 		this.UUIDManager.RegisterName("redirect@ddnet.org", NETMSG.System.NETMSG_REDIRECT);
 
+
+		this.UUIDManager.RegisterName("rcon-cmd-group-start@ddnet.org", NETMSG.System.NETMSG_RCON_CMD_GROUP_START) // not implemented
+		this.UUIDManager.RegisterName("rcon-cmd-group-end@ddnet.org", NETMSG.System.NETMSG_RCON_CMD_GROUP_END) // not implemented
+		this.UUIDManager.RegisterName("map-reload@ddnet.org", NETMSG.System.NETMSG_MAP_RELOAD) // not implemented
+		this.UUIDManager.RegisterName("reconnect@ddnet.org", NETMSG.System.NETMSG_RECONNECT) // implemented
+		this.UUIDManager.RegisterName("sv-maplist-add@ddnet.org", NETMSG.System.NETMSG_MAPLIST_ADD) // not implemented
+		this.UUIDManager.RegisterName("sv-maplist-start@ddnet.org", NETMSG.System.NETMSG_MAPLIST_GROUP_START) // not implemented
+		this.UUIDManager.RegisterName("sv-maplist-end@ddnet.org", NETMSG.System.NETMSG_MAPLIST_GROUP_END) // not implemented
+
+
 		this.UUIDManager.RegisterName("i-am-npm-package@swarfey.gitlab.io", NETMSG.System.NETMSG_I_AM_NPM_PACKAGE);
 
 	}
@@ -431,7 +441,7 @@ export class Client extends EventEmitter {
 				this.host = address;
 			})
 		}
- 
+		
 		this.State = States.STATE_CONNECTING;
 
 		let predTimer = setInterval(() => {
@@ -450,8 +460,9 @@ export class Client extends EventEmitter {
 			else
 				clearInterval(connectInterval)
 		}, 500);
+		let inputInterval: NodeJS.Timeout;
 		if (!this.options?.lightweight) {
-			let inputInterval = setInterval(() => {
+			inputInterval = setInterval(() => {
 				if (this.State == States.STATE_OFFLINE) {
 					clearInterval(inputInterval)
 					// console.log("???");
@@ -760,6 +771,17 @@ export class Client extends EventEmitter {
 								packer.AddBuffer(this.UUIDManager.LookupType(NETMSG.System.NETMSG_PONGEX)!.hash);
 
 								this.SendMsgEx(packer, 2);
+							} else if (chunk.msgid == NETMSG.System.NETMSG_RECONNECT) {
+								this.SendControlMsg(4) // sends disconnect packet
+								clearInterval(predTimer);
+								clearInterval(inputInterval);
+								clearInterval(resendTimeout);
+								clearInterval(Timeout);
+								this.socket?.removeAllListeners("message");
+								this.connect();
+
+
+								return;
 							}
 
 						}
