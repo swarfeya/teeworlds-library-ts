@@ -1,9 +1,11 @@
 # Teeworlds Client
 Library to connect a bot to a Teeworlds server.
 
+
 # Links
 https://github.com/swarfeya/teeworlds-library-ts/tree/main
 https://www.npmjs.com/package/teeworlds
+
 
 # Documentation
 You can find an documentation to what most components do in the [docs/documentation.md](https://github.com/swarfeya/teeworlds-library-ts/blob/main/docs/documentation.md).
@@ -13,6 +15,8 @@ You can also find a few examples inside of the [docs/examples](https://github.co
 Note: If you have or know any projects running using this library, please contact me so i can add them, or PR them yourself.
 
 A discord which is bridging all discord messages and ingame messages (currently closed source): https://discord.gg/MSYcjYvU6e
+
+You can find more projects [here](https://github.com/swarfeya/teeworlds-library-ts/blob/main/docs/documentation.md#projects-using-this-library)
 
 # Usage
 Example file:
