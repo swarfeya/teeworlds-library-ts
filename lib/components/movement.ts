@@ -1,4 +1,4 @@
-interface NetObj_PlayerInput {
+export interface NetObj_PlayerInput {
 	m_Direction: number,
 	m_TargetX: number,
 	m_TargetY: number,
