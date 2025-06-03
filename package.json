@@ -3,10 +3,16 @@
 	"version": "2.5.5",
 	"description": "Library for (ingame) teeworlds bots.",
 	"license": "MIT",
-	"main": "index.js",
+	"main": "dist/index.js",
+	"types": "dist/index.d.ts",
+	"files": [
+		"dist",
+		"README.md",
+		"LICENSE"
+	],
 	"scripts": {
-		"test": "echo \"Error: no test specified\" && exit 1",
-		"build": "tsc",
+		"clean": "rimraf dist",
+		"build": "npm run clean && tsc",
 		"prepare": "npm run build"
 	},
 	"repository": {
@@ -20,6 +26,7 @@
 	],
 	"devDependencies": {
 		"@types/node": "^22.13.5",
+		"rimraf": "^6.0.1",
 		"typescript": "^5.8.2"
 	}
 }

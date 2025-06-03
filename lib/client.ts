@@ -6,7 +6,7 @@ import net from 'dgram';
 import { EventEmitter } from 'stream';
 
 import { unpackString, MsgUnpacker } from "./MsgUnpacker";
-let { version } = require('../package.json');
+import { version as libVersion } from '../package.json';
 
 import Movement from './components/movement';
 import { _Packet, Chunk, DeltaItem, SnapshotItemTypes } from './enums_types/types';
@@ -519,16 +519,16 @@ export class Client extends EventEmitter {
 						client_version.AddBuffer(randomUuid);
 						if (this.options?.ddnet_version !== undefined) {
 							client_version.AddInt(this.options?.ddnet_version.version);
-							client_version.AddString(`DDNet ${this.options?.ddnet_version.release_version}; https://www.npmjs.com/package/teeworlds/v/${version}`);
+							client_version.AddString(`DDNet ${this.options?.ddnet_version.release_version}; https://www.npmjs.com/package/teeworlds/v/${libVersion}`);
 						} else {
 							client_version.AddInt(16050);
-							client_version.AddString(`DDNet 16.5.0; https://www.npmjs.com/package/teeworlds/v/${version}`);
+							client_version.AddString(`DDNet 16.5.0; https://www.npmjs.com/package/teeworlds/v/${libVersion}`);
 						}
 		
 						var i_am_npm_package = new MsgPacker(0, true, 1);
 						i_am_npm_package.AddBuffer(this.UUIDManager.LookupType(NETMSG.System.NETMSG_I_AM_NPM_PACKAGE)!.hash);
 									
-						i_am_npm_package.AddString(`https://www.npmjs.com/package/teeworlds/v/${version}`);
+						i_am_npm_package.AddString(`https://www.npmjs.com/package/teeworlds/v/${libVersion}`);
 
 
 						this.SendMsgEx([i_am_npm_package, client_version, info])
