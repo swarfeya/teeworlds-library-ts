@@ -71,7 +71,6 @@ interface ClientEvents {
     map_details: (message: { map_name: string, map_sha256: Buffer, map_crc: number, map_size: number, map_url: string }) => void;
     capabilities: (message: { ChatTimeoutCode: boolean, AnyPlayerFlag: boolean, PingEx: boolean, AllowDummy: boolean, SyncWeaponInput: boolean }) => void;
     snapshot: (items: DeltaItem[]) => void;
-    rcon_line: (line: string) => void;
 }
 
 export class Client extends EventEmitter {
