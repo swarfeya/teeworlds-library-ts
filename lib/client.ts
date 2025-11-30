@@ -689,7 +689,7 @@ export class Client extends EventEmitter {
 
 						}
 						
-						if (chunk.msgid >= NETMSG.System.NETMSG_WHATIS && chunk.msgid <= NETMSG.System.NETMSG_CHECKSUM_ERROR) {
+						if (chunk.msgid >= NETMSG.System.NETMSG_WHATIS && chunk.msgid <= NETMSG.System.NETMSG_I_AM_NPM_PACKAGE) {
 							if (chunk.msgid == NETMSG.System.NETMSG_WHATIS) {
 								let Uuid = chunk.raw.slice(0, 16);
 
