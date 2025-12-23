@@ -359,7 +359,7 @@ client.connect();
 ```
 
 # Examples
-You can find some of the examples in the [docs/examples](docs/examples/) folder.
+You can find some of the examples in the [/docs/examples](/docs/examples/) folder.
 
 # Projects using this library
 *Note:* If you have or know any projects running using this library, please contact me so i can add them, or PR them yourself.
