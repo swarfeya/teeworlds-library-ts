@@ -20,7 +20,7 @@ You can find more projects [here](https://github.com/swarfeya/teeworlds-library-
 
 # Usage
 Example file:
-```
+```js
 const teeworlds = require('teeworlds')
 let client = new teeworlds.Client("127.0.0.1", 8303, "nameless tee");
 
