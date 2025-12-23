@@ -50,6 +50,11 @@ declare interface iKillMsg {
 	weapon: number,
 	special_mode: number
 }
+declare interface iMapChange {
+	map_name: string, 
+	crc: number,
+	size: number
+}
 
 declare interface iOptions {
 	identity?: SnapshotItemTypes.ClientInfo,
@@ -62,6 +67,7 @@ declare interface iOptions {
 
 interface ClientEvents {
     connected: () => void;
+    map_change: (message: iMapChange) => void;
     disconnect: (reason: string) => void;
     emote: (message: iEmoticon) => void;
     message: (message: iMessage) => void;
@@ -592,6 +598,12 @@ export class Client extends EventEmitter {
 						// https://ddnet.org/docs/libtw2/connection/
 
 						if (chunk.msgid == NETMSG.System.NETMSG_MAP_CHANGE) {
+							let unpacker = new MsgUnpacker(chunk.raw);
+							const map_name = unpacker.unpackString();
+							const crc = unpacker.unpackInt();
+							const size = unpacker.unpackInt();
+
+							this.emit("map_change", {map_name, crc, size} as iMapChange);
 							this.Flush();
 							var Msg = new MsgPacker(NETMSG.System.NETMSG_READY, true, 1); /* ready */
 							this.SendMsgEx(Msg);		
