@@ -74,6 +74,7 @@ interface ClientEvents {
     broadcast: (message: string) => void;
     kill: (kill: iKillMsg) => void;
     motd: (message: string) => void;
+    teams: (teams: Array<number>) => void;
     map_details: (message: { map_name: string, map_sha256: Buffer, map_crc: number, map_size: number, map_url: string }) => void;
     capabilities: (message: { ChatTimeoutCode: boolean, AnyPlayerFlag: boolean, PingEx: boolean, AllowDummy: boolean, SyncWeaponInput: boolean }) => void;
     snapshot: (items: DeltaItem[]) => void;
@@ -205,7 +206,7 @@ export class Client extends EventEmitter {
 		this.UUIDManager.RegisterName("sv-maplist-start@ddnet.org", NETMSG.System.NETMSG_MAPLIST_GROUP_START) // not implemented
 		this.UUIDManager.RegisterName("sv-maplist-end@ddnet.org", NETMSG.System.NETMSG_MAPLIST_GROUP_END) // not implemented
 
-    this.UUIDManager.RegisterName("teamsstate@netmsg.ddnet.tw", NETMSG.Game.NETMSG_TEAMSSTATE)
+    this.UUIDManager.RegisterName("teamsstate@netmsg.ddnet.tw", NETMSG.Game.SV_TEAMSSTATE)
 
 		this.UUIDManager.RegisterName("i-am-npm-package@swarfey.gitlab.io", NETMSG.System.NETMSG_I_AM_NPM_PACKAGE);
 
