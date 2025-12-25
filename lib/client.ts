@@ -51,7 +51,7 @@ declare interface iKillMsg {
 	special_mode: number
 }
 declare interface iMapChange {
-	map_name: string, 
+	map_name: string,
 	crc: number,
 	size: number
 }
@@ -83,11 +83,11 @@ export class Client extends EventEmitter {
 	on<K extends keyof ClientEvents>(event: K, listener: ClientEvents[K]): this {
 		return super.on(event, listener);
 	}
-	
+
 	emit<K extends keyof ClientEvents>(event: K, ...args: Parameters<ClientEvents[K]>): boolean {
 		return super.emit(event, ...args);
 	}
-	
+
 	public rcon: Rcon;
 	private host: string;
 	private port: number;
@@ -106,20 +106,20 @@ export class Client extends EventEmitter {
 
 	private PredGameTick: number;
 	private AckGameTick: number;
-	
+
 	private SnapshotParts: number;
 	private currentSnapshotGameTick: number;
 
-	
+
 	private snaps: Buffer[];
-	
+
 	private sentChunkQueue: Buffer[];
 	private queueChunkEx: MsgPacker[];
 	private lastSendTime: number;
 	private lastRecvTime: number;
 
 	private lastSentMessages: {msg: MsgPacker, ack: number}[];
-	
+
 
 	public movement: Movement;
 	public game: Game;
@@ -132,7 +132,7 @@ export class Client extends EventEmitter {
 	private requestResend: boolean;
 
 	private UUIDManager: UUIDManager;
-  
+
 	constructor(ip: string, port: number, nickname: string, options?: iOptions) {
 		super();
 		this.host = ip;
@@ -147,13 +147,13 @@ export class Client extends EventEmitter {
 		this.SnapUnpacker = new Snapshot(this);
 		// this.eSnapHolder = [];
 		this.requestResend = false;
-		
+
 		this.VoteList = [];
 
-		if (options) 			
+		if (options)
 			this.options = options;
 
-			
+
 		this.snaps = [];
 
 		this.sentChunkQueue = [];
@@ -175,12 +175,12 @@ export class Client extends EventEmitter {
 		this.lastSentMessages = [];
 
 		this.movement = new Movement();
-		
+
 		this.game = new Game(this);
 		this.SnapshotUnpacker = new SnapshotWrapper(this);
 
 		this.UUIDManager = new UUIDManager();
-		
+
 		this.UUIDManager.RegisterName("what-is@ddnet.tw", NETMSG.System.NETMSG_WHATIS);
 		this.UUIDManager.RegisterName("it-is@ddnet.tw", NETMSG.System.NETMSG_ITIS);
 		this.UUIDManager.RegisterName("i-dont-know@ddnet.tw", NETMSG.System.NETMSG_IDONTKNOW);
@@ -222,7 +222,7 @@ export class Client extends EventEmitter {
 	}
 	private ResendAfter(lastAck: number) {
 		this.clientAck = lastAck;
-		
+
 
 		let toResend: MsgPacker[] = [];
 		this.lastSentMessages.forEach(msg => {
@@ -243,12 +243,12 @@ export class Client extends EventEmitter {
 			this.ResendAfter(unpacked.twprotocol.ack);
 		}
 		packet = packet.slice(3)
-		
+
 		if (unpacked.twprotocol.flags & 8 && !(unpacked.twprotocol.flags & 1)) { // compression flag
 			packet = huff.decompress(packet)
 			if (packet.length == 1 && packet[0] == -1)
 				return unpacked
-		} 
+		}
 
 
 		for (let i = 0; i < unpacked.twprotocol.chunkAmount; i++) {
@@ -276,15 +276,15 @@ export class Client extends EventEmitter {
 				}
 			}
 
-			packet = packet.slice(chunk.bytes) 
+			packet = packet.slice(chunk.bytes)
 			unpacked.chunks.push(chunk)
 		}
 		return unpacked
 	}
 
-	
+
 	/**  Send a Control Msg to the server. (used for disconnect)*/
-	SendControlMsg(msg: number, ExtraMsg: string = "") { 
+	SendControlMsg(msg: number, ExtraMsg: string = "") {
 		this.lastSendTime = new Date().getTime();
 		return new Promise((resolve, reject) => {
 			if (this.socket) {
@@ -296,18 +296,18 @@ export class Client extends EventEmitter {
 
 			}
 			setTimeout(() => { resolve("failed, rip") }, 2000)
-			/* 	after 2 seconds it was probably not able to send, 
+			/* 	after 2 seconds it was probably not able to send,
 				so when sending a quit message the user doesnt
 				stay stuck not being able to ctrl + c
 		*/
 		})
 	}
 
-	
+
 	/**  Send a Msg (or Msg[]) to the server.*/
-	SendMsgEx(Msgs: MsgPacker[] | MsgPacker, flags = 0) { 
+	SendMsgEx(Msgs: MsgPacker[] | MsgPacker, flags = 0) {
 		if (this.State == States.STATE_OFFLINE)
-			return; 
+			return;
 		if (!this.socket)
 			return;
 		let _Msgs: MsgPacker[];
@@ -344,7 +344,7 @@ export class Client extends EventEmitter {
 		// let flags = 0;
 		if (this.requestResend)
 			flags |= 4;
-		
+
 		var packetHeader = Buffer.from([((flags<<4)&0xf0)|((this.ack>>8)&0xf), this.ack & 0xff, _Msgs.length]);
 		var chunks = Buffer.from([]);
 		let skip = false;
@@ -363,7 +363,7 @@ export class Client extends EventEmitter {
 			return;
 		this.socket.send(packet, 0, packet.length, this.port, this.host)
 	}
-	
+
 	/** Queue a chunk (instantly sent if flush flag is set - otherwise it will be sent in the next packet). */
 	QueueChunkEx(Msg: MsgPacker | MsgPacker[]) {
 		if (Msg instanceof Array) {
@@ -382,9 +382,9 @@ export class Client extends EventEmitter {
 		if (Msg.flag & 4)
 			this.Flush();
 	}
-	
+
 	/**  Send a Raw Buffer (as chunk) to the server. */
-	SendMsgRaw(chunks: Buffer[]) { 
+	SendMsgRaw(chunks: Buffer[]) {
 		if (this.State == States.STATE_OFFLINE)
 			return;
 		if (!this.socket)
@@ -404,7 +404,7 @@ export class Client extends EventEmitter {
 		var chunk: Chunk = {} as Chunk;
 		chunk.bytes = ((packet[0] & 0x3f) << 4) | (packet[1] & ((1 << 4) - 1));
 		chunk.flags = (packet[0] >> 6) & 3;
-		
+
 		if (chunk.flags & 1) {
 			chunk.seq = ((packet[1]&0xf0)<<2) | packet[2];
 			packet = packet.slice(3) // remove flags & size
@@ -422,8 +422,8 @@ export class Client extends EventEmitter {
 				chunk.msgid = uuid.type_id;
 				chunk.msg = uuid.name;
 				chunk.raw = chunk.raw.slice(16);
-			}	
-			
+			}
+
 		}
 		return chunk;
 	}
@@ -435,7 +435,7 @@ export class Client extends EventEmitter {
 		this.ack = this.lastCheckedChunkAck;
 
 	}
-	
+
 	/** Connect the client to the server. */
 	async connect() {
 		// test via regex whether or not this.host is a domain or an ip
@@ -446,16 +446,16 @@ export class Client extends EventEmitter {
 				this.host = address;
 			})
 		}
-		
+
 		this.State = States.STATE_CONNECTING;
 
 		let predTimer = setInterval(() => {
 			if (this.State == States.STATE_ONLINE) {
 				if (this.AckGameTick > 0)
 					this.PredGameTick++;
-			} else if (this.State == States.STATE_OFFLINE) 
+			} else if (this.State == States.STATE_OFFLINE)
 				clearInterval(predTimer);
-			
+
 		}, 1000/50); // 50 ticks per second
 
 		this.SendControlMsg(1, "TKEN")
@@ -487,7 +487,7 @@ export class Client extends EventEmitter {
 			} else
 				clearInterval(resendTimeout)
 		}, 1000)
-		
+
 		let Timeout = setInterval(() => {
 			let timeoutTime = this.options?.timeout ? this.options.timeout : 15000;
 			if ((new Date().getTime() - this.lastRecvTime) > timeoutTime) {
@@ -504,7 +504,7 @@ export class Client extends EventEmitter {
 				if (this.State == 0 || rinfo.address != this.host || rinfo.port != this.port)
 					return;
 				clearInterval(connectInterval)
-				
+
 				if (packet[0] == 0x10) {
 					if (packet.toString().includes("TKEN") || packet[3] == 0x2) {
 						clearInterval(connectInterval);
@@ -512,7 +512,7 @@ export class Client extends EventEmitter {
 						this.SendControlMsg(3);
 						this.State = States.STATE_LOADING; // loading state
 						this.receivedSnaps = 0;
-						
+
 						var info = new MsgPacker(1, true, 1);
 						info.AddString(this.options?.NET_VERSION ? this.options.NET_VERSION : "0.6 626fce9a778df4d4");
 						info.AddString(this.options?.password === undefined ? "" : this.options?.password); // password
@@ -529,10 +529,10 @@ export class Client extends EventEmitter {
 							client_version.AddInt(16050);
 							client_version.AddString(`DDNet 16.5.0; https://www.npmjs.com/package/teeworlds/v/${libVersion}`);
 						}
-		
+
 						var i_am_npm_package = new MsgPacker(0, true, 1);
 						i_am_npm_package.AddBuffer(this.UUIDManager.LookupType(NETMSG.System.NETMSG_I_AM_NPM_PACKAGE)!.hash);
-									
+
 						i_am_npm_package.AddString(`https://www.npmjs.com/package/teeworlds/v/${libVersion}`);
 
 
@@ -542,14 +542,14 @@ export class Client extends EventEmitter {
 						this.State = States.STATE_OFFLINE;
 						let reason: string = (unpackString(packet.slice(4)).result);
 						this.emit("disconnect", reason);
-					} 
+					}
 					if (packet[3] !== 0x0) { // keepalive
 						this.lastRecvTime = new Date().getTime();
 					}
 				} else {
 					this.lastRecvTime = new Date().getTime();
 				}
-				
+
 				var unpacked: _Packet = this.Unpack(packet);
 				// unpacked.chunks = unpacked.chunks.filter(chunk => ((chunk.flags & 2) && (chunk.flags & 1)) ? chunk.seq! > this.ack : true); // filter out already received chunks
 				this.sentChunkQueue.forEach((buff, i) => {
@@ -558,7 +558,7 @@ export class Client extends EventEmitter {
 						let chunk = this.MsgToChunk(buff);
 						if (chunk.seq && chunk.seq >= this.ack)
 							this.sentChunkQueue.splice(i, 1);
-					} 
+					}
 				})
 				unpacked.chunks.forEach(chunk => {
 					if (!(((chunk.flags & 2) && (chunk.flags & 1)) ? chunk.seq! > this.ack : true))
@@ -567,12 +567,12 @@ export class Client extends EventEmitter {
 						this.lastCheckedChunkAck = chunk.seq!;
 						if (chunk.seq === (this.ack+1)%(1<<10)) { // https://github.com/nobody-mb/twchatonly/blob/master/chatonly.cpp#L237
 							this.ack = chunk.seq!;
-							
+
 							this.requestResend = false;
 						}
 						else { //IsSeqInBackroom (old packet that we already got)
 							let Bottom = (this.ack - (1<<10)/2);
-							
+
 							if(Bottom < 0) {
 								if((chunk.seq! <= this.ack) || (chunk.seq! >= (Bottom + (1<<10)))) {}
 								else
@@ -585,7 +585,7 @@ export class Client extends EventEmitter {
 						}
 					}
 
-					if (chunk.sys) { 
+					if (chunk.sys) {
 						// system messages
 						if (chunk.msgid == NETMSG.System.NETMSG_PING) { // ping
 							let packer = new MsgPacker(NETMSG.System.NETMSG_PING_REPLY, true, 0);
@@ -606,17 +606,17 @@ export class Client extends EventEmitter {
 							this.emit("map_change", {map_name, crc, size} as iMapChange);
 							this.Flush();
 							var Msg = new MsgPacker(NETMSG.System.NETMSG_READY, true, 1); /* ready */
-							this.SendMsgEx(Msg);		
+							this.SendMsgEx(Msg);
 						} else if (chunk.msgid == NETMSG.System.NETMSG_CON_READY) {
 							var info = new MsgPacker(NETMSG.Game.CL_STARTINFO, false, 1);
 							if (this.options?.identity) {
-								info.AddString(this.options.identity.name); 
-								info.AddString(this.options.identity.clan); 
-								info.AddInt(this.options.identity.country); 
-								info.AddString(this.options.identity.skin); 
+								info.AddString(this.options.identity.name);
+								info.AddString(this.options.identity.clan);
+								info.AddInt(this.options.identity.country);
+								info.AddString(this.options.identity.skin);
 								info.AddInt(this.options.identity.use_custom_color);
-								info.AddInt(this.options.identity.color_body); 
-								info.AddInt(this.options.identity.color_feet); 
+								info.AddInt(this.options.identity.color_body);
+								info.AddInt(this.options.identity.color_feet);
 							} else {
 								info.AddString(this.name); /* name */
 								info.AddString(""); /* clan */
@@ -630,7 +630,7 @@ export class Client extends EventEmitter {
 							var crashmeplx = new MsgPacker(17, true, 1); // rcon
 							crashmeplx.AddString("crashmeplx"); // 64 player support message
 							this.SendMsgEx([info, crashmeplx]);
-						} 
+						}
 
 						if (chunk.msgid >= NETMSG.System.NETMSG_SNAP && chunk.msgid <= NETMSG.System.NETMSG_SNAPSINGLE) {
 							this.receivedSnaps++; /* wait for 2 ss before seeing self as connected */
@@ -644,7 +644,7 @@ export class Client extends EventEmitter {
 
 					// snapChunks.forEach(chunk => {
 						let unpacker = new MsgUnpacker(chunk.raw);
-			
+
 						let NumParts = 1;
 						let Part = 0;
 						let GameTick = unpacker.unpackInt();
@@ -656,7 +656,7 @@ export class Client extends EventEmitter {
 						if (chunk.msgid == NETMSG.System.NETMSG_SNAP) {
 							NumParts = unpacker.unpackInt();
 							Part = unpacker.unpackInt();
-						}	
+						}
 
 						if (chunk.msgid != NETMSG.System.NETMSG_SNAPEMPTY) {
 							Crc = unpacker.unpackInt();
@@ -677,30 +677,30 @@ export class Client extends EventEmitter {
 							this.snaps[Part] = unpacker.remaining;
 
 							this.SnapshotParts |= 1 << Part;
-							
+
 							if (this.SnapshotParts == ((1 << NumParts) - 1)) {
 								let mergedSnaps = Buffer.concat(this.snaps);
 								this.SnapshotParts = 0;
 
 								let snapUnpacked = this.SnapUnpacker.unpackSnapshot(mergedSnaps, DeltaTick, GameTick, Crc);
-								
+
 								this.emit("snapshot", snapUnpacked.items);
 								this.AckGameTick = snapUnpacked.recvTick;
 								if (Math.abs(this.PredGameTick - this.AckGameTick) > 10) {
 									this.PredGameTick = this.AckGameTick + 1;
 									this.sendInput();
 								}
-							} 
+							}
 
 
-						} 
+						}
 
-					
+
 					// })
 
 
 						}
-						
+
 						if (chunk.msgid >= NETMSG.System.NETMSG_WHATIS && chunk.msgid <= NETMSG.System.NETMSG_I_AM_NPM_PACKAGE) {
 							if (chunk.msgid == NETMSG.System.NETMSG_WHATIS) {
 								let Uuid = chunk.raw.slice(0, 16);
@@ -710,13 +710,13 @@ export class Client extends EventEmitter {
 								if (uuid !== undefined) {
 									// IT_IS msg
 									packer.AddBuffer(this.UUIDManager.LookupType(NETMSG.System.NETMSG_ITIS)!.hash);
-									
+
 									packer.AddBuffer(Uuid);
 									packer.AddString(uuid.name);
 								} else {
 									// dont_know msg
 									packer.AddBuffer(this.UUIDManager.LookupType(NETMSG.System.NETMSG_IDONTKNOW)!.hash);
-									
+
 									packer.AddBuffer(Uuid);
 								}
 								this.QueueChunkEx(packer)
@@ -733,9 +733,9 @@ export class Client extends EventEmitter {
 								let map_size = unpacker.unpackInt();
 
 								let map_url = "";
-								if (unpacker.remaining.length) 
+								if (unpacker.remaining.length)
 									map_url = unpacker.unpackString();
-								
+
 								this.emit("map_details", {map_name, map_sha256, map_crc, map_size, map_url})
 								// unpacker.unpack
 
@@ -748,7 +748,7 @@ export class Client extends EventEmitter {
 								let DDNet = false;
 								if (Version >= 1) {
 									DDNet = Boolean(Flags & 1);
-									
+
 								}
 								let ChatTimeoutCode = DDNet;
 								let AnyPlayerFlag = DDNet;
@@ -797,7 +797,7 @@ export class Client extends EventEmitter {
 
 						}
 
-					} else { 
+					} else {
 						// game messages
 
 						// vote list:
@@ -815,16 +815,16 @@ export class Client extends EventEmitter {
 							this.VoteList.push(...list);
 						} else if (chunk.msgid == NETMSG.Game.SV_VOTEOPTIONADD) {
 							let unpacker = new MsgUnpacker(chunk.raw)
-							
+
 							this.VoteList.push(unpacker.unpackString());
 						} else if (chunk.msgid == NETMSG.Game.SV_VOTEOPTIONREMOVE) {
 							let unpacker = new MsgUnpacker(chunk.raw)
-							
+
 							let index = this.VoteList.indexOf(unpacker.unpackString());
 
 							if (index > -1)
 								this.VoteList = this.VoteList.splice(index, 1);
-							
+
 						}
 
 						// events
@@ -836,14 +836,14 @@ export class Client extends EventEmitter {
 							} as iEmoticon;
 
 							if (unpacked.client_id != -1) {
-								unpacked.author = { 
-									ClientInfo: this.SnapshotUnpacker.getObjClientInfo(unpacked.client_id), 
-									PlayerInfo: this.SnapshotUnpacker.getObjPlayerInfo(unpacked.client_id) 
+								unpacked.author = {
+									ClientInfo: this.SnapshotUnpacker.getObjClientInfo(unpacked.client_id),
+									PlayerInfo: this.SnapshotUnpacker.getObjPlayerInfo(unpacked.client_id)
 								}
 							}
 							this.emit("emote", unpacked)
 
-							
+
 
 						} else if (chunk.msgid == NETMSG.Game.SV_BROADCAST) {
 							let unpacker = new MsgUnpacker(chunk.raw);
@@ -858,9 +858,9 @@ export class Client extends EventEmitter {
 							} as iMessage;
 
 							if (unpacked.client_id != -1) {
-								unpacked.author = { 
-									ClientInfo: this.SnapshotUnpacker.getObjClientInfo(unpacked.client_id), 
-									PlayerInfo: this.SnapshotUnpacker.getObjPlayerInfo(unpacked.client_id) 
+								unpacked.author = {
+									ClientInfo: this.SnapshotUnpacker.getObjClientInfo(unpacked.client_id),
+									PlayerInfo: this.SnapshotUnpacker.getObjPlayerInfo(unpacked.client_id)
 								}
 							}
 							this.emit("message", unpacked)
@@ -895,7 +895,7 @@ export class Client extends EventEmitter {
 				})
 
 				if (this.State == States.STATE_ONLINE) {
-					if (new Date().getTime() - this.time >= 500) { 
+					if (new Date().getTime() - this.time >= 500) {
 						this.Flush();
 					}
 					if (new Date().getTime() - this.time >= 1000) {
@@ -907,7 +907,7 @@ export class Client extends EventEmitter {
 			})
 	}
 	/** Sending the input. (automatically done unless options.lightweight is on) */
-	sendInput(input = this.movement.input) { 
+	sendInput(input = this.movement.input) {
 		if (this.State != States.STATE_ONLINE)
 			return;
 
@@ -926,17 +926,17 @@ export class Client extends EventEmitter {
 		inputMsg.AddInt(input.m_WantedWeapon)
 		inputMsg.AddInt(input.m_NextWeapon)
 		inputMsg.AddInt(input.m_PrevWeapon)
-		
+
 		this.SendMsgEx(inputMsg);
 	}
 	/** returns the movement object of the client */
-	get input() { 
+	get input() {
 		return this.movement.input;
 	}
 
-	
+
 	/** Disconnect the client. */
-	Disconnect() { 
+	Disconnect() {
 		return new Promise((resolve) => {
 			this.SendControlMsg(4).then(() => {
 				resolve(true);
@@ -949,7 +949,7 @@ export class Client extends EventEmitter {
 	}
 
 	/** Get all available vote options (for example for map voting) */
-	get VoteOptionList(): string[] { 
+	get VoteOptionList(): string[] {
 		return this.VoteList;
 	}
 	get rawSnapUnpacker(): Snapshot {
