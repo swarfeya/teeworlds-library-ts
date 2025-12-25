@@ -206,7 +206,7 @@ export class Client extends EventEmitter {
 		this.UUIDManager.RegisterName("sv-maplist-start@ddnet.org", NETMSG.System.NETMSG_MAPLIST_GROUP_START) // not implemented
 		this.UUIDManager.RegisterName("sv-maplist-end@ddnet.org", NETMSG.System.NETMSG_MAPLIST_GROUP_END) // not implemented
 
-    this.UUIDManager.RegisterName("teamsstate@netmsg.ddnet.tw", NETMSG.Game.SV_TEAMSSTATE)
+		this.UUIDManager.RegisterName("teamsstate@netmsg.ddnet.tw", NETMSG.UUID.SV_TEAMSSTATE)
 
 		this.UUIDManager.RegisterName("i-am-npm-package@swarfey.gitlab.io", NETMSG.System.NETMSG_I_AM_NPM_PACKAGE);
 
@@ -431,7 +431,6 @@ export class Client extends EventEmitter {
 	}
 	Flush() {
 		// if (this.queueChunkEx.length == 0)
-		console.log("flushing");
 		this.SendMsgEx(this.queueChunkEx);
 		this.queueChunkEx = [];
 		this.ack = this.lastCheckedChunkAck;
@@ -884,7 +883,7 @@ export class Client extends EventEmitter {
 							let unpacker = new MsgUnpacker(chunk.raw);
 							let message = unpacker.unpackString();
 							this.emit("motd", message);
-						} else if (chunk.msgid == NETMSG.Game.SV_TEAMSSTATE) {
+						} else if (chunk.msgid == NETMSG.UUID.SV_TEAMSSTATE) {
 						  let unpacker = new MsgUnpacker(chunk.raw);
 						  const teams = Array.from({ length: 64 }).map(() => unpacker.unpackInt());
 						  this.emit("teams", teams);
