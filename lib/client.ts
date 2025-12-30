@@ -62,7 +62,8 @@ declare interface iOptions {
 	ddnet_version?: {version: number, release_version: string},
 	timeout?: number, // in ms
 	NET_VERSION?: string,
-	lightweight?: boolean // experimental, only sends keepalive's (sendinput has to be called manually)
+	lightweight?: boolean, // experimental, only sends keepalive's (sendinput has to be called manually)
+	timeout_on_connecting?: boolean, // don't reconnect if timeout occurs when establishing connection
 }
 
 interface ClientEvents {
