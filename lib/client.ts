@@ -154,7 +154,6 @@ export class Client extends EventEmitter {
 		if (options)
 			this.options = options;
 
-
 		this.snaps = [];
 
 		this.sentChunkQueue = [];
@@ -492,6 +491,8 @@ export class Client extends EventEmitter {
 		let Timeout = setInterval(() => {
 			let timeoutTime = this.options?.timeout ? this.options.timeout : 15000;
 			if ((new Date().getTime() - this.lastRecvTime) > timeoutTime) {
+				if (this.options?.timeout_on_connecting && this.State == States.STATE_CONNECTING)
+					clearInterval(connectInterval);
 				this.State = States.STATE_OFFLINE;
 				this.emit("disconnect", "Timed Out. (no packets received for " + (new Date().getTime() - this.lastRecvTime) + "ms)");
 				clearInterval(Timeout);
