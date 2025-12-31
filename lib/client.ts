@@ -51,8 +51,8 @@ declare interface iKillMsg {
 	special_mode: number
 }
 declare interface iKillMsgTeam {
-	first: number,
-	team: number
+	team: number,
+	first: number
 }
 declare interface iMapChange {
 	map_name: string,
@@ -896,8 +896,8 @@ export class Client extends EventEmitter {
 						} else if (chunk.msgid == NETMSG.UUID.SV_KILLMSGTEAM) {
 						  let unpacked: iKillMsgTeam = {} as iKillMsgTeam;
 						  let unpacker = new MsgUnpacker(chunk.raw);
-						  unpacked.first = unpacker.unpackInt();
 						  unpacked.team = unpacker.unpackInt();
+						  unpacked.first = unpacker.unpackInt();
 						  this.emit("teamkill", unpacked)
 						}
 
