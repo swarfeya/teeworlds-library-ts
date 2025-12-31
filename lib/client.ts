@@ -50,6 +50,10 @@ declare interface iKillMsg {
 	weapon: number,
 	special_mode: number
 }
+declare interface iKillMsgTeam {
+	team: number,
+	first: number
+}
 declare interface iMapChange {
 	map_name: string,
 	crc: number,
@@ -76,6 +80,7 @@ interface ClientEvents {
     kill: (kill: iKillMsg) => void;
     motd: (message: string) => void;
     teams: (teams: Array<number>) => void;
+	teamkill: (teamkill: iKillMsgTeam) => void;
     map_details: (message: { map_name: string, map_sha256: Buffer, map_crc: number, map_size: number, map_url: string }) => void;
     capabilities: (message: { ChatTimeoutCode: boolean, AnyPlayerFlag: boolean, PingEx: boolean, AllowDummy: boolean, SyncWeaponInput: boolean }) => void;
     snapshot: (items: DeltaItem[]) => void;
@@ -206,6 +211,7 @@ export class Client extends EventEmitter {
 		this.UUIDManager.RegisterName("sv-maplist-start@ddnet.org", NETMSG.System.NETMSG_MAPLIST_GROUP_START) // not implemented
 		this.UUIDManager.RegisterName("sv-maplist-end@ddnet.org", NETMSG.System.NETMSG_MAPLIST_GROUP_END) // not implemented
 
+		this.UUIDManager.RegisterName("killmsgteam@netmsg.ddnet.tw", NETMSG.UUID.SV_KILLMSGTEAM)
 		this.UUIDManager.RegisterName("teamsstate@netmsg.ddnet.tw", NETMSG.UUID.SV_TEAMSSTATE)
 
 		this.UUIDManager.RegisterName("i-am-npm-package@swarfey.gitlab.io", NETMSG.System.NETMSG_I_AM_NPM_PACKAGE);
@@ -889,6 +895,12 @@ export class Client extends EventEmitter {
 						  let unpacker = new MsgUnpacker(chunk.raw);
 						  const teams = Array.from({ length: 64 }).map(() => unpacker.unpackInt());
 						  this.emit("teams", teams);
+						} else if (chunk.msgid == NETMSG.UUID.SV_KILLMSGTEAM) {
+						  let unpacked: iKillMsgTeam = {} as iKillMsgTeam;
+						  let unpacker = new MsgUnpacker(chunk.raw);
+						  unpacked.team = unpacker.unpackInt();
+						  unpacked.first = unpacker.unpackInt();
+						  this.emit("teamkill", unpacked)
 						}
 
 						// packets neccessary for connection
