@@ -7,7 +7,7 @@ export const createTwMD5Hash = (name: string) => { // https://github.com/ddnet/d
 	hash[6] &= 0x0f;
 	hash[6] |= 0x30;
 	hash[8] &= 0x3f;
-	hash[8] |= 0x80;	
+	hash[8] |= 0x80;
 	return hash;
 }
 
