@@ -73,7 +73,7 @@ declare interface iOptions {
 interface ClientEvents {
     connected: () => void;
     map_change: (message: iMapChange) => void;
-    disconnect: (reason: string) => void;
+    disconnect: (reason: string, fromServer: boolean) => void;
     emote: (message: iEmoticon) => void;
     message: (message: iMessage) => void;
     broadcast: (message: string) => void;
@@ -99,7 +99,7 @@ export class Client extends EventEmitter {
 	private host: string;
 	private port: number;
 	private name: string;
-	private State: number; // 0 = offline; 1 = STATE_CONNECTING = 1, STATE_LOADING = 2, STATE_ONLINE = 3
+	private _State: number; // 0 = offline; 1 = STATE_CONNECTING = 1, STATE_LOADING = 2, STATE_ONLINE = 3
 	private ack: number;
 	private clientAck: number;
 	private lastCheckedChunkAck: number;
@@ -140,6 +140,13 @@ export class Client extends EventEmitter {
 
 	private UUIDManager: UUIDManager;
 
+	// Interval/timer IDs for cleanup
+	private predTimer?: NodeJS.Timeout;
+	private connectInterval?: NodeJS.Timeout;
+	private inputInterval?: NodeJS.Timeout;
+	private resendTimeout?: NodeJS.Timeout;
+	private timeoutChecker?: NodeJS.Timeout;
+
 	constructor(ip: string, port: number, nickname: string, options?: iOptions) {
 		super();
 		this.host = ip;
@@ -165,7 +172,7 @@ export class Client extends EventEmitter {
 		this.sentChunkQueue = [];
 		this.queueChunkEx = [];
 
-		this.State = States.STATE_OFFLINE; // 0 = offline; 1 = STATE_CONNECTING = 1, STATE_LOADING = 2, STATE_ONLINE = 3
+		this._State = States.STATE_OFFLINE; // 0 = offline; 1 = STATE_CONNECTING = 1, STATE_LOADING = 2, STATE_ONLINE = 3
 		this.ack = 0; // ack of messages the client has received
 		this.clientAck = 0; // ack of messages the client has sent
 		this.lastCheckedChunkAck = 0; // this.ack gets reset to this when flushing - used for resetting tick on e.g. map change
@@ -227,6 +234,54 @@ export class Client extends EventEmitter {
 		this.currentSnapshotGameTick = 0;
 		this.AckGameTick = -1;
 		this.PredGameTick = 0;
+	}
+
+	/** Clear all intervals and timers */
+	private clearAllIntervals() {
+		if (this.predTimer) {
+			clearInterval(this.predTimer);
+			this.predTimer = undefined;
+		}
+		if (this.connectInterval) {
+			clearInterval(this.connectInterval);
+			this.connectInterval = undefined;
+		}
+		if (this.inputInterval) {
+			clearInterval(this.inputInterval);
+			this.inputInterval = undefined;
+		}
+		if (this.resendTimeout) {
+			clearInterval(this.resendTimeout);
+			this.resendTimeout = undefined;
+		}
+		if (this.timeoutChecker) {
+			clearInterval(this.timeoutChecker);
+			this.timeoutChecker = undefined;
+		}
+	}
+
+	/** Reset client state for a fresh connection */
+	private resetState() {
+		this.ack = 0;
+		this.clientAck = 0;
+		this.lastCheckedChunkAck = 0;
+		this.receivedSnaps = 0;
+		this.AckGameTick = 0;
+		this.PredGameTick = 0;
+		this.currentSnapshotGameTick = 0;
+		this.SnapshotParts = 0;
+		this.snaps = [];
+		this.sentChunkQueue = [];
+		this.queueChunkEx = [];
+		this.lastSentMessages = [];
+		this.VoteList = [];
+		this.requestResend = false;
+		this.TKEN = Buffer.from([255, 255, 255, 255]);
+		this.time = new Date().getTime() + 2000;
+		this.lastSendTime = new Date().getTime();
+		this.lastRecvTime = new Date().getTime();
+		this.SnapUnpacker = new Snapshot(this);
+		this.SnapshotUnpacker = new SnapshotWrapper(this);
 	}
 	private ResendAfter(lastAck: number) {
 		this.clientAck = lastAck;
@@ -314,7 +369,7 @@ export class Client extends EventEmitter {
 
 	/**  Send a Msg (or Msg[]) to the server.*/
 	SendMsgEx(Msgs: MsgPacker[] | MsgPacker, flags = 0) {
-		if (this.State == States.STATE_OFFLINE)
+		if (this._State == States.STATE_OFFLINE)
 			return;
 		if (!this.socket)
 			return;
@@ -393,7 +448,7 @@ export class Client extends EventEmitter {
 
 	/**  Send a Raw Buffer (as chunk) to the server. */
 	SendMsgRaw(chunks: Buffer[]) {
-		if (this.State == States.STATE_OFFLINE)
+		if (this._State == States.STATE_OFFLINE)
 			return;
 		if (!this.socket)
 			return;
@@ -443,8 +498,24 @@ export class Client extends EventEmitter {
 
 	}
 
-	/** Connect the client to the server. */
+	/** Connect the client to the server. Throws an error if client.State is equal to teeworlds.Protocol.States.STATE_ONLINE or STATE_CONNECTING.*/
 	async connect() {
+		if (this._State == States.STATE_CONNECTING || this._State == States.STATE_ONLINE) {
+			throw new Error(`The client is already ${this._State == States.STATE_CONNECTING ? "connecting" : "connected"}.`);
+		}
+		// Clean up any existing connection state
+		this.clearAllIntervals();
+		this.resetState();
+
+		// Recreate socket if it was closed
+		if (!this.socket) {
+			this.socket = net.createSocket("udp4");
+			this.socket.bind();
+		} else {
+			// Remove old listeners to prevent duplicates
+			this.socket.removeAllListeners("message");
+		}
+
 		// test via regex whether or not this.host is a domain or an ip
 		// if not, resolve it
 		if (!this.host.match(/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/)) {
@@ -454,55 +525,51 @@ export class Client extends EventEmitter {
 			})
 		}
 
-		this.State = States.STATE_CONNECTING;
+		this._State = States.STATE_CONNECTING;
 
-		let predTimer = setInterval(() => {
-			if (this.State == States.STATE_ONLINE) {
+		this.predTimer = setInterval(() => {
+			if (this._State == States.STATE_ONLINE) {
 				if (this.AckGameTick > 0)
 					this.PredGameTick++;
-			} else if (this.State == States.STATE_OFFLINE)
-				clearInterval(predTimer);
-
+			}
 		}, 1000/50); // 50 ticks per second
 
 		this.SendControlMsg(1, "TKEN")
-		let connectInterval = setInterval(() => {
-			if (this.State == States.STATE_CONNECTING)
+		this.connectInterval = setInterval(() => {
+			if (this._State == States.STATE_CONNECTING)
 				this.SendControlMsg(1, "TKEN")
-			else
-				clearInterval(connectInterval)
+			else if (this.connectInterval) {
+				clearInterval(this.connectInterval);
+				this.connectInterval = undefined;
+			}
 		}, 500);
-		let inputInterval: NodeJS.Timeout;
+
 		if (!this.options?.lightweight) {
-			inputInterval = setInterval(() => {
-				if (this.State == States.STATE_OFFLINE) {
-					clearInterval(inputInterval)
-					// console.log("???");
-				}
-				if (this.State != States.STATE_ONLINE)
+			this.inputInterval = setInterval(() => {
+				if (this._State != States.STATE_ONLINE)
 					return;
 				this.time = new Date().getTime();
 				this.sendInput();
 			}, 50)
 		}
 
-		let resendTimeout = setInterval(() => {
-			if (this.State != States.STATE_OFFLINE) {
+		this.resendTimeout = setInterval(() => {
+			if (this._State != States.STATE_OFFLINE) {
 				if (((new Date().getTime()) - this.lastSendTime) > 900 && this.sentChunkQueue.length > 0) {
 					this.SendMsgRaw([this.sentChunkQueue[0]]);
 				}
-			} else
-				clearInterval(resendTimeout)
+			}
 		}, 1000)
 
-		let Timeout = setInterval(() => {
+		this.timeoutChecker = setInterval(() => {
 			let timeoutTime = this.options?.timeout ? this.options.timeout : 15000;
 			if ((new Date().getTime() - this.lastRecvTime) > timeoutTime) {
-				if (this.options?.timeout_on_connecting && this.State == States.STATE_CONNECTING)
-					clearInterval(connectInterval);
-				this.State = States.STATE_OFFLINE;
-				this.emit("disconnect", "Timed Out. (no packets received for " + (new Date().getTime() - this.lastRecvTime) + "ms)");
-				clearInterval(Timeout);
+				if (this.options?.timeout_on_connecting && this._State == States.STATE_CONNECTING) {
+					this.clearAllIntervals();
+				}
+				this._State = States.STATE_OFFLINE;
+
+				this.emit("disconnect", "Timed Out. (no packets received for " + (new Date().getTime() - this.lastRecvTime) + "ms)", false);
 			}
 		}, 5000)
 
@@ -510,16 +577,16 @@ export class Client extends EventEmitter {
 
 		if (this.socket)
 			this.socket.on("message", (packet, rinfo) => {
-				if (this.State == 0 || rinfo.address != this.host || rinfo.port != this.port)
+				if (this._State == States.STATE_OFFLINE || rinfo.address != this.host || rinfo.port != this.port)
 					return;
-				clearInterval(connectInterval)
+				clearInterval(this.connectInterval)
 
 				if (packet[0] == 0x10) {
 					if (packet.toString().includes("TKEN") || packet[3] == 0x2) {
-						clearInterval(connectInterval);
+						clearInterval(this.connectInterval);
 						this.TKEN = packet.slice(-4)
 						this.SendControlMsg(3);
-						this.State = States.STATE_LOADING; // loading state
+						this._State = States.STATE_LOADING; // loading state
 						this.receivedSnaps = 0;
 
 						var info = new MsgPacker(1, true, 1);
@@ -548,9 +615,9 @@ export class Client extends EventEmitter {
 						this.SendMsgEx([i_am_npm_package, client_version, info])
 					} else if (packet[3] == 0x4) {
 						// disconnected
-						this.State = States.STATE_OFFLINE;
+						this._State = States.STATE_OFFLINE;
 						let reason: string = (unpackString(packet.slice(4)).result);
-						this.emit("disconnect", reason);
+						this.emit("disconnect", reason, true);
 					}
 					if (packet[3] !== 0x0) { // keepalive
 						this.lastRecvTime = new Date().getTime();
@@ -644,9 +711,9 @@ export class Client extends EventEmitter {
 						if (chunk.msgid >= NETMSG.System.NETMSG_SNAP && chunk.msgid <= NETMSG.System.NETMSG_SNAPSINGLE) {
 							this.receivedSnaps++; /* wait for 2 ss before seeing self as connected */
 							if (this.receivedSnaps == 2) {
-								if (this.State != States.STATE_ONLINE)
+								if (this._State != States.STATE_ONLINE)
 									this.emit('connected')
-								this.State = States.STATE_ONLINE;
+								this._State = States.STATE_ONLINE;
 							}
 							if (Math.abs(this.PredGameTick - this.AckGameTick) > 10)
 						this.PredGameTick = this.AckGameTick + 1;
@@ -792,15 +859,7 @@ export class Client extends EventEmitter {
 
 								this.SendMsgEx(packer, 2);
 							} else if (chunk.msgid == NETMSG.System.NETMSG_RECONNECT) {
-								this.SendControlMsg(4) // sends disconnect packet
-								clearInterval(predTimer);
-								clearInterval(inputInterval);
-								clearInterval(resendTimeout);
-								clearInterval(Timeout);
-								this.socket?.removeAllListeners("message");
-								this.connect();
-
-
+								this._Disconnect(false).then(() => this.connect());
 								return;
 							}
 
@@ -913,7 +972,7 @@ export class Client extends EventEmitter {
 					}
 				})
 
-				if (this.State == States.STATE_ONLINE) {
+				if (this._State == States.STATE_ONLINE) {
 					if (new Date().getTime() - this.time >= 500) {
 						this.Flush();
 					}
@@ -927,7 +986,7 @@ export class Client extends EventEmitter {
 	}
 	/** Sending the input. (automatically done unless options.lightweight is on) */
 	sendInput(input = this.movement.input) {
-		if (this.State != States.STATE_ONLINE)
+		if (this._State != States.STATE_ONLINE)
 			return;
 
 		let inputMsg = new MsgPacker(16, true, 0);
@@ -954,16 +1013,34 @@ export class Client extends EventEmitter {
 	}
 
 
-	/** Disconnect the client. */
-	Disconnect() {
-		return new Promise((resolve) => {
+	/** Disconnect the client. Throws an error if client.State == teeworlds.Protocol.States.STATE_OFFLINE. */
+	private _Disconnect(closeSocket: boolean = true) {
+		return new Promise((resolve, reject) => {
+			if (this._State == States.STATE_OFFLINE) {
+				reject("The client is already offline.");
+			}
+			this.clearAllIntervals();
+			this._State = States.STATE_OFFLINE;
 			this.SendControlMsg(4).then(() => {
-				resolve(true);
-				if (this.socket)
+				if (closeSocket && this.socket) {
+					this.socket.removeAllListeners("message");
 					this.socket.close();
-				this.socket = undefined
-				this.State = States.STATE_OFFLINE;
+					this.socket = undefined;
+				}
+				resolve(true);
 			})
+		})
+	}
+	/** Disconnect the client. Throws an error if client.State == teeworlds.Protocol.States.STATE_OFFLINE. */
+	Disconnect() {
+		return new Promise((resolve, reject) => {
+
+			this._Disconnect(true)
+				.then(() => {
+					this.emit("disconnect", "", false);
+					resolve(true);
+				});
+
 		})
 	}
 
@@ -973,5 +1050,8 @@ export class Client extends EventEmitter {
 	}
 	get rawSnapUnpacker(): Snapshot {
 		return this.SnapUnpacker;
+	}
+	get State(): States {
+		return this._State;
 	}
 }
