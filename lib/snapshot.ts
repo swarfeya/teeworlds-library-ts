@@ -80,22 +80,22 @@ interface eSnap {
 	ack: number,
 }
 
-// https://github.com/ddnet/ddnet/blob/571b0b36de83d18f2524ee371fc3223d04b94135/datasrc/network.py#L236
-let supported_uuids = [
-	"my-own-object@heinrich5991.de",
-	"character@netobj.ddnet.tw", // validate_size=False
-	"player@netobj.ddnet.tw",
-	"gameinfo@netobj.ddnet.tw", // validate_size=False
-	"projectile@netobj.ddnet.tw",
-	"laser@netobj.ddnet.tw",
-]
-
 export class Snapshot {
 	deltas: DeltaItem[] = [];
 	eSnapHolder: eSnap[] = [];
 	crc_errors: number = 0;
 	client: Client;
 	uuid_manager: UUIDManager = new UUIDManager(32767, true); // snapshot max_type
+
+	// https://github.com/ddnet/ddnet/blob/571b0b36de83d18f2524ee371fc3223d04b94135/datasrc/network.py#L236
+	supported_uuids = [
+		"my-own-object@heinrich5991.de",
+		"character@netobj.ddnet.tw", // validate_size=False
+		"player@netobj.ddnet.tw",
+		"gameinfo@netobj.ddnet.tw", // validate_size=False
+		"projectile@netobj.ddnet.tw",
+		"laser@netobj.ddnet.tw",
+	]
 
 	constructor(_client: Client) {
 		this.client = _client;
@@ -553,11 +553,11 @@ export class Snapshot {
 				let targetUUID = Buffer.from(test2(data));
 				if (!this.uuid_manager.LookupType(id)) {
 					
-					supported_uuids.forEach((a, i) => {
+					this.supported_uuids.forEach((a, i) => {
 						let uuid = createTwMD5Hash(a);
 						if (targetUUID.compare(uuid) == 0) {
 							this.uuid_manager.RegisterName(a, id);
-							supported_uuids.splice(i, 1);
+							this.supported_uuids.splice(i, 1);
 						}
 					})
 				}
