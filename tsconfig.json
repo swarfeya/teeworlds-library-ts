@@ -7,7 +7,6 @@
     "sourceMap": true,                        // Generates corresponding '.map' file
     "outDir": "./dist",                       // Output directory
     "rootDir": "./",                          // Root directory of input files
-    "types": ["node"],
 
     /* Strict Type-Checking Options */
     "strict": true,                           // Enable all strict type-checking options
