@@ -156,7 +156,7 @@ export class Huffman {
 
 			while (bitcount >= 8) {
 				output.push(bits & 0xff);
-				bits >>= 8;
+				bits >>>= 8;
 				bitcount -= 8;
 			}
 		}
@@ -165,7 +165,7 @@ export class Huffman {
 
 		while (bitcount >= 8) {
 			output.push(bits & 0xff);
-			bits >>= 8;
+			bits >>>= 8;
 			bitcount -= 8;
 		}
 		output.push(bits);
@@ -188,16 +188,17 @@ export class Huffman {
 				node_i = this.decode_lut[bits & HUFFMAN_LUTMASK];
 			while (bitcount < 24 && src_index != size) {
 				bits |= inp_buffer[src_index] << bitcount;
+				bits >>>= 0;
 				bitcount += 8;
 				src_index++;
 			}
 			if (node_i == -1)
 				node_i = this.decode_lut[bits & HUFFMAN_LUTMASK];
 			if (this.nodes[node_i].numbits) {
-				bits >>= this.nodes[node_i].numbits;
+				bits >>>= this.nodes[node_i].numbits;
 				bitcount -= this.nodes[node_i].numbits;
 			} else {
-				bits >>= HUFFMAN_LUTBITS;
+				bits >>>= HUFFMAN_LUTBITS;
 				bitcount -= HUFFMAN_LUTBITS;
 
 				while (true) {
@@ -206,7 +207,7 @@ export class Huffman {
 					} else
 						node_i = this.nodes[node_i].left;
 					bitcount -= 1;
-					bits >>= 1;
+					bits >>>= 1;
 
 					if (this.nodes[node_i].numbits)
 						break;
